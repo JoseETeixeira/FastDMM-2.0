@@ -156,9 +156,8 @@ public class AttachedTileService {
         Map<String, Location> neighbors = new HashMap<>();
         neighbors.put("N", new Location(origin.x, origin.y + 1, origin.z));
         neighbors.put("S", new Location(origin.x, origin.y - 1, origin.z));
-    // Note: UI orientation requires E/W to be mirrored relative to map coords
-    neighbors.put("E", new Location(origin.x - 1, origin.y, origin.z));
-    neighbors.put("W", new Location(origin.x + 1, origin.y, origin.z));
+    neighbors.put("E", new Location(origin.x + 1, origin.y, origin.z));
+    neighbors.put("W", new Location(origin.x - 1, origin.y, origin.z));
 
     // Tile key at current origin (not used for skip anymore; we compare against root)
     String originKey = editor.dmm.map.get(origin);
