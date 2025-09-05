@@ -361,7 +361,7 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 			JToolBar toolBar = new JToolBar();
 			toolBar.setFloatable(false);
 			toolGroup = new ButtonGroup();
-			btnSelectRegion = new JToggleButton("Select");
+			btnSelectRegion = new JToggleButton("Select (M)"); // shortcut changed from S to M
 			btnPencil = new JToggleButton("Pencil");
 			btnEraser = new JToggleButton("Eraser");
 			btnRectangle = new JToggleButton("Rect");
@@ -1018,7 +1018,7 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 					SwingUtilities.invokeLater(this::redoAction);
 				}
 				// Tool hotkeys
-				if (Keyboard.getEventKey() == Keyboard.KEY_S) {
+				if (Keyboard.getEventKey() == Keyboard.KEY_M) { // Changed from S to M to avoid Ctrl+S conflict
 					SwingUtilities.invokeLater(() -> setTool("select-region"));
 				} else if (Keyboard.getEventKey() == Keyboard.KEY_V) {
 					SwingUtilities.invokeLater(() -> setTool("select-single"));
