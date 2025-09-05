@@ -136,6 +136,21 @@ public class SelectPlacementMode implements PlacementMode {
 			JMenuItem item = new JMenuItem("Delete in Selection");
 			item.addActionListener(new SelectPlacementMode.SelectListener(editor, this, true, false));
 			menu.add(item);
+			// New: create prefab from current selection
+			JMenuItem prefabItem = new JMenuItem("Create Prefab from Selection");
+			prefabItem.addActionListener(ev -> {
+				if (editor.prefabManager == null) return;
+				String name = javax.swing.JOptionPane.showInputDialog(menu, "Prefab name:");
+				if (name == null || name.trim().isEmpty()) return;
+				com.github.monster860.fastdmm.prefab.Prefab p = editor.prefabManager.create(name.trim(), 1, 1);
+				// capture selection into prefab (reuse panel logic)
+				if (editor.prefabPanel != null) {
+					editor.prefabPanel.captureFromSelection(p);
+					editor.prefabManager.save();
+					editor.prefabPanel.refreshList();
+				}
+			});
+			menu.add(prefabItem);
 			item = new JMenuItem("Copy Selection");
 			item.addActionListener(new SelectPlacementMode.SelectListener(editor, this, false, true));
 			menu.add(item);

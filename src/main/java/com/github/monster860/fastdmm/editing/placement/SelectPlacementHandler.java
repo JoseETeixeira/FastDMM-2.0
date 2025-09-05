@@ -32,6 +32,8 @@ public class SelectPlacementHandler implements PlacementHandler {
 			selectMode = SELECT_MODE_SUBTRACT;
 		else if(editor.isShiftPressed)
 			selectMode = SELECT_MODE_ADD;
+		// Deselect any armed prefab upon starting a manual selection
+		editor.deselectPrefab();
 	}
 
 	@Override

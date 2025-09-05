@@ -111,6 +111,10 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 	private JToggleButton btnRandom;
 	private ButtonGroup toolGroup;
 
+	// Prefabs support (package-visible for placement modes & context menu helpers)
+	public com.github.monster860.fastdmm.prefab.PrefabPanel prefabPanel; // left tab UI
+	public com.github.monster860.fastdmm.prefab.PrefabManager prefabManager; // lifecycle per DME
+
 	private JMenuBar menuBar;
 	private JMenu menuRecent;
 	private JMenu menuRecentMaps;
@@ -145,11 +149,22 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 	// Tool forcing flags
 	public boolean forceDirectional = false;
 	public boolean forceBlock = false;
+	// Prefab one-shot placement arming
+	public boolean prefabArmed = false;
+	public void deselectPrefab() {
+		prefabArmed = false;
+		if (prefabPanel != null) prefabPanel.clearSelection();
+		// If we're currently in prefab placement mode, revert to normal pencil tool
+		if (placementMode instanceof com.github.monster860.fastdmm.editing.placement.PrefabPlacementMode) {
+			// Use setTool so buttons/UI sync; since prefabArmed now false this will select DefaultPlacementMode
+			setTool("pencil");
+		}
+	}
 
 	private boolean areMenusFrozen = false;
 
-	// Switch active tool and placement mode
-	private void setTool(String tool) {
+	// Switch active tool and placement mode (public so auxiliary panels like PrefabPanel can request tool changes)
+	public void setTool(String tool) {
 		if (placementMode != null) placementMode.flush(this);
 		selMode = false;
 		forceDirectional = false;
@@ -166,12 +181,24 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 		boolean showRandomUI = "random".equals(tool);
 		if (randomChanceLabel != null) randomChanceLabel.setVisible(showRandomUI);
 		if (randomChanceSpinner != null) randomChanceSpinner.setVisible(showRandomUI);
+		if (tool != null && tool.startsWith("prefab:")) {
+			String pname = tool.substring("prefab:".length());
+			if (prefabManager != null) {
+				com.github.monster860.fastdmm.prefab.Prefab p = prefabManager.prefabs.get(pname);
+				if (p != null) {
+					placementMode = new com.github.monster860.fastdmm.editing.placement.PrefabPlacementMode(this, p);
+					return;
+				}
+			}
+		}
 		switch (tool) {
 			case "select-region":
+				deselectPrefab();
 				placementMode = new SelectPlacementMode();
 				selMode = true;
 				break;
 			case "select-single":
+				deselectPrefab();
 				placementMode = new SelectPlacementMode();
 				selMode = true;
 				break;
@@ -190,11 +217,38 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 				// fallthrough
 			case "pencil":
 			default:
+				if (prefabArmed && prefabPanel != null) {
+					String sel = prefabPanel.getSelectedPrefab();
+					if (sel != null && prefabManager != null && prefabManager.prefabs.containsKey(sel)) {
+						placementMode = new com.github.monster860.fastdmm.editing.placement.PrefabPlacementMode(this, prefabManager.prefabs.get(sel));
+						break;
+					}
+				}
 				placementMode = new DefaultPlacementMode();
 				break;
 			case "random":
+				if (prefabArmed && prefabPanel != null) {
+					String sel = prefabPanel.getSelectedPrefab();
+					if (sel != null && prefabManager != null && prefabManager.prefabs.containsKey(sel)) {
+						placementMode = new com.github.monster860.fastdmm.editing.placement.PrefabPlacementMode(this, prefabManager.prefabs.get(sel));
+						break;
+					}
+				}
 				placementMode = new RandomPlacementMode();
 		}
+	}
+
+	// Initialize prefab manager after a project (DME) is successfully loaded
+	public void ensurePrefabManager() {
+		if (prefabManager != null) return;
+		if (dme == null || dmm == null || objTree == null) return;
+		try {
+			java.nio.file.Path dmeDir = dme.getParentFile().toPath();
+			prefabManager = new com.github.monster860.fastdmm.prefab.PrefabManager(dmm, objTree, dmeDir);
+			prefabManager.load();
+			prefabManager.rebuildPreviews(this);
+			if (prefabPanel != null) prefabPanel.attachManager(prefabManager);
+		} catch (Exception ex) { ex.printStackTrace(); }
 	}
 
 	public static final void main(String[] args) throws IOException, LWJGLException {
@@ -263,6 +317,15 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 				currentZ = val;
 				if (dmm != null) dmm.storedZ = currentZ;
 			});
+			// Prefab manager is initialized when a DME is opened; guard here against null dme during startup
+			if (dme != null) {
+				try {
+					java.nio.file.Path dmeDir = dme.getParentFile().toPath();
+					prefabManager = new com.github.monster860.fastdmm.prefab.PrefabManager(dmm, objTree, dmeDir);
+					prefabManager.load();
+					if (prefabPanel != null) prefabPanel.attachManager(prefabManager);
+				} catch (Exception ex) { ex.printStackTrace(); }
+			}
 			rightInfo.add(new JLabel("Z:"));
 			rightInfo.add(zSpinner);
 			rightInfo.add(selection);
@@ -316,6 +379,9 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 
 			leftTabs = new JTabbedPane();
 			leftTabs.addTab("Objects", objTreePanel);
+			// Prefabs tab (initialized before DME load; manager attached later)
+			prefabPanel = new com.github.monster860.fastdmm.prefab.PrefabPanel(this);
+			leftTabs.addTab("Prefabs", prefabPanel);
 			leftTabs.addTab("Instances", instancesPanel);
 			leftPanel.add(leftTabs, BorderLayout.CENTER);
 			
@@ -362,11 +428,11 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 			toolBar.setFloatable(false);
 			toolGroup = new ButtonGroup();
 			btnSelectRegion = new JToggleButton("Select (M)"); // shortcut changed from S to M
-			btnPencil = new JToggleButton("Pencil");
-			btnEraser = new JToggleButton("Eraser");
-			btnRectangle = new JToggleButton("Rect");
-			btnPicker = new JToggleButton("Pick");
-            btnRandom = new JToggleButton("Random");
+			btnPencil = new JToggleButton("Pencil (P)");
+			btnEraser = new JToggleButton("Eraser (E)");
+			btnRectangle = new JToggleButton("Rect (F)");
+			btnPicker = new JToggleButton("Pick (I)");
+            btnRandom = new JToggleButton("Random (R)");
 			// Tooltips with shortcuts
 			btnSelectRegion.setToolTipText("Select (S)");
 			btnPencil.setToolTipText("Pencil (P)");
@@ -566,6 +632,8 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 			instancesVis.setModel(selectedObject);
 			if(selectedInstance == null || objTree.get(selectedInstance.typeString()) != selectedObject)
 				selectedInstance = selectedObject;
+			// Picking a new object brush cancels prefab arming
+			deselectPrefab();
 			instancesVis.setSelectedValue(selectedInstance, true);
 		}
 	}
@@ -575,6 +643,8 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 		if(instancesVis.getSelectedValue() == null)
 			return;
 		selectedInstance = instancesVis.getSelectedValue();
+		// Selecting a specific instance cancels prefab arming
+		deselectPrefab();
 	}
 
 	@Override
@@ -780,6 +850,8 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 						addToRecent(dme, dmm);
 						FastDMM.this.setTitle(dme.getName().replaceFirst("[.][^.]+$", ""));
 						initRecent("both");
+						// After DME parse completes, ensure prefab manager available
+						ensurePrefabManager();
 					});
 				}
 			}
@@ -855,6 +927,8 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 				this.setTitle(dme.getName().replaceFirst("[.][^.]+$", "") + ": "
 						+ dmm.file.getName().replaceFirst("[.][^.]+$", ""));
 				initRecent("both");
+				// Ensure prefab manager now that a map is open
+				ensurePrefabManager();
 			}
 		}
 	}
@@ -1196,8 +1270,13 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 				if (Mouse.getEventButton() == 0 && currPlacementHandler != null) {
 					synchronized (this) {
 						currPlacementHandler.finalizePlacement();
+						prefabArmed = false; // disarm after one placement
 					}
 					currPlacementHandler = null;
+					// If we were in prefab placement mode, revert tool now
+					if (placementMode instanceof com.github.monster860.fastdmm.editing.placement.PrefabPlacementMode) {
+						setTool("pencil");
+					}
 				}
 			}
 		}
@@ -1671,7 +1750,10 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 		redostack.push(action);
 		menuItemRedo.setEnabled(true);
 		menuItemUndo.setEnabled(!undostack.isEmpty());
-		return action.undo();
+		boolean res = action.undo();
+		// Clear any transient placement preview state so visual matches undone map
+		if (placementMode != null) placementMode.flush(this);
+		return res;
 	}
 	
 	public boolean redoAction(){

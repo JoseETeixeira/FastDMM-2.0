@@ -17,6 +17,11 @@ public class TileInstance {
 	public List<ObjInstance> objs;
 	DMM dmm;
 	public int refCount = 0;
+
+	// Prefab reference metadata (if this tile was placed as part of a prefab instance)
+	public String prefabName = null; // name of prefab
+	public int prefabRelX = 0; // relative coordinate within prefab footprint
+	public int prefabRelY = 0;
 	
 	public TileInstance(List<ObjInstance> objs, DMM dmm) {
 		this.dmm = dmm;

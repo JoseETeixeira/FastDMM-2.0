@@ -63,6 +63,11 @@ public class IconSubstate implements Icon {
 		return true;
 	}
 
+	public java.awt.image.BufferedImage getSubImage() {
+		if (dmi.image == null) return null;
+		return dmi.image.getSubimage(i_x1, i_y1, dmi.width, dmi.height);
+	}
+
 	@Override
 	public void paintIcon(Component arg0, Graphics arg1, int px, int py) {
 		arg1.drawImage(dmi.image, px, py, px+dmi.width-1, py+dmi.height-1, i_x1, i_y1, i_x2, i_y2, arg0);
