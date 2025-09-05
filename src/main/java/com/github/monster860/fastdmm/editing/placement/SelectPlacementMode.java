@@ -69,14 +69,33 @@ public class SelectPlacementMode implements PlacementMode {
     public int visualize(Set<RenderInstance> rendInstanceSet, int currCreationIndex) {
         if(editor == null)
             return currCreationIndex;
-        for(Location l : selection) {
-            int dirs = 0;
-            for(int i = 0; i < 4; i++) {
-                int cdir = IconState.indexToDirArray[i];
-                Location l2 = l.getStep(cdir);
-                if(!selection.contains(l2))
-                    dirs |= cdir;
-            }
+		for(Location l : selection) {
+			int dirs = 0;
+			for(int i = 0; i < 4; i++) {
+				int cdir = IconState.indexToDirArray[i];
+				Location l2 = l.getStep(cdir);
+				// Show edge only when neighbor tile is not part of selection or area type differs
+				boolean neighborInSel = selection.contains(l2);
+				if (!neighborInSel) {
+					dirs |= cdir;
+				} else if (editor != null && editor.dmm != null) {
+					String k1 = editor.dmm.map.get(l);
+					String k2 = editor.dmm.map.get(l2);
+					if (k1 != null && k2 != null) {
+						TileInstance t1 = editor.dmm.instances.get(k1);
+						TileInstance t2 = editor.dmm.instances.get(k2);
+						if (t1 != null && t2 != null) {
+							com.github.monster860.fastdmm.objtree.ObjInstance a1 = t1.getArea();
+							com.github.monster860.fastdmm.objtree.ObjInstance a2 = t2.getArea();
+							String a1t = (a1 != null) ? a1.typeString() : null;
+							String a2t = (a2 != null) ? a2.typeString() : null;
+							if (a1t != null && a2t != null && !a1t.equals(a2t)) {
+								dirs |= cdir;
+							}
+						}
+					}
+				}
+			}
             if(dirs != 0) {
                 RenderInstance ri = new RenderInstance(currCreationIndex++);
                 ri.plane = 101;
@@ -146,6 +165,7 @@ public class SelectPlacementMode implements PlacementMode {
 	public void flush(FastDMM editor) {
 		if(floatSelect != null) {
 			floatSelect.anchor(editor.dmm);
+			floatSelect = null; // prevent lingering visualization after flush (e.g., on save or tool switch)
 		}
 	}
 

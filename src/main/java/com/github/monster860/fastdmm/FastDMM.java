@@ -1354,10 +1354,12 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 									dirs |= cdir;
 									continue;
 								}
-								// Null-safe area comparison to avoid NPEs when tiles temporarily lack an area
+								// Compare area by typeString; ignore transient nulls (handled by instId/instance2 checks above)
 								ObjInstance a1 = instance.getArea();
 								ObjInstance a2 = instance2.getArea();
-								if (a1 == null || a2 == null || !a1.equals(a2)) {
+								String a1t = (a1 != null) ? a1.typeString() : null;
+								String a2t = (a2 != null) ? a2.typeString() : null;
+								if (a1t != null && a2t != null && !a1t.equals(a2t)) {
 									dirs |= cdir;
 								}
 							}
