@@ -34,6 +34,7 @@ import com.github.monster860.fastdmm.editing.placement.PlacementHandler;
 import com.github.monster860.fastdmm.editing.placement.PlacementMode;
 import com.github.monster860.fastdmm.editing.placement.SelectPlacementMode;
 import com.github.monster860.fastdmm.editing.placement.PickerPlacementMode;
+import com.github.monster860.fastdmm.editing.placement.RandomPlacementMode;
 import com.github.monster860.fastdmm.editing.ui.EditorTabComponent;
 import com.github.monster860.fastdmm.editing.ui.EmptyTabPanel;
 import com.github.monster860.fastdmm.editing.ui.NoDmeTreeModel;
@@ -94,6 +95,10 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
     private JSpinner zSpinner;
 	// Right-side inspector
 	private TileInspectorPanel inspectorPanel;
+	// Random placement UI state
+	private JLabel randomChanceLabel;
+	private JSpinner randomChanceSpinner;
+	public int randomChancePercent = 50;
 
 	// Map tools (exclusive)
 	private JToggleButton btnSelectRegion;
@@ -103,6 +108,7 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 	private JToggleButton btnRectangle;
 	private JToggleButton btnAdjacent;
 	private JToggleButton btnPicker;
+	private JToggleButton btnRandom;
 	private ButtonGroup toolGroup;
 
 	private JMenuBar menuBar;
@@ -156,6 +162,10 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 		if (btnRectangle != null) btnRectangle.setSelected("rectangle".equals(tool));
 		if (btnAdjacent != null) btnAdjacent.setSelected("adjacent".equals(tool));
 		if (btnPicker != null) btnPicker.setSelected("picker".equals(tool));
+		if (btnRandom != null) btnRandom.setSelected("random".equals(tool));
+		boolean showRandomUI = "random".equals(tool);
+		if (randomChanceLabel != null) randomChanceLabel.setVisible(showRandomUI);
+		if (randomChanceSpinner != null) randomChanceSpinner.setVisible(showRandomUI);
 		switch (tool) {
 			case "select-region":
 				placementMode = new SelectPlacementMode();
@@ -181,6 +191,9 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 			case "pencil":
 			default:
 				placementMode = new DefaultPlacementMode();
+				break;
+			case "random":
+				placementMode = new RandomPlacementMode();
 		}
 	}
 
@@ -353,24 +366,28 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 			btnEraser = new JToggleButton("Eraser");
 			btnRectangle = new JToggleButton("Rect");
 			btnPicker = new JToggleButton("Pick");
+            btnRandom = new JToggleButton("Random");
 			// Tooltips with shortcuts
 			btnSelectRegion.setToolTipText("Select (S)");
 			btnPencil.setToolTipText("Pencil (P)");
 			btnEraser.setToolTipText("Eraser (E)");
 			btnRectangle.setToolTipText("Fill rectangle (F)");
 			btnPicker.setToolTipText("Pick tile (I)");
+            btnRandom.setToolTipText("Place randomly in rectangle (R)");
 			// Group exclusivity
 			toolGroup.add(btnSelectRegion);
 			toolGroup.add(btnPencil);
 			toolGroup.add(btnEraser);
 			toolGroup.add(btnRectangle);
 			toolGroup.add(btnPicker);
+            toolGroup.add(btnRandom);
 			// Listeners -> set placement mode
 			btnSelectRegion.addActionListener(e -> setTool("select-region"));
 			btnPencil.addActionListener(e -> setTool("pencil"));
 			btnEraser.addActionListener(e -> setTool("eraser"));
 			btnRectangle.addActionListener(e -> setTool("rectangle"));
 			btnPicker.addActionListener(e -> setTool("picker"));
+            btnRandom.addActionListener(e -> setTool("random"));
 			// Default tool
 			btnPencil.setSelected(true);
 			// Assemble toolbar
@@ -379,6 +396,16 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 			toolBar.add(btnEraser);
 			toolBar.add(btnRectangle);
 			toolBar.add(btnPicker);
+            toolBar.add(btnRandom);
+			// Random chance controls (placed next to Random button)
+			randomChanceLabel = new JLabel(" Chance %:");
+			randomChanceSpinner = new JSpinner(new SpinnerNumberModel(randomChancePercent, 0, 100, 1));
+			((JSpinner.DefaultEditor) randomChanceSpinner.getEditor()).getTextField().setColumns(3);
+			randomChanceSpinner.addChangeListener(e -> randomChancePercent = (Integer) randomChanceSpinner.getValue());
+			randomChanceLabel.setVisible(false);
+			randomChanceSpinner.setVisible(false);
+			toolBar.add(randomChanceLabel);
+			toolBar.add(randomChanceSpinner);
 			topBar.add(toolBar, BorderLayout.EAST);
 			editorPanel.add(topBar, BorderLayout.NORTH);
 
@@ -1005,6 +1032,8 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 					SwingUtilities.invokeLater(() -> setTool("adjacent"));
 				} else if (Keyboard.getEventKey() == Keyboard.KEY_I) {
 					SwingUtilities.invokeLater(() -> setTool("picker"));
+				} else if (Keyboard.getEventKey() == Keyboard.KEY_R) {
+					SwingUtilities.invokeLater(() -> setTool("random"));
 				}
 				// Z navigation with PageUp/PageDown
 				if (dmm != null) {
