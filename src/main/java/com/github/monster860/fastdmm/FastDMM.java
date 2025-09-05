@@ -38,6 +38,7 @@ import com.github.monster860.fastdmm.editing.ui.EditorTabComponent;
 import com.github.monster860.fastdmm.editing.ui.EmptyTabPanel;
 import com.github.monster860.fastdmm.editing.ui.NoDmeTreeModel;
 import com.github.monster860.fastdmm.editing.ui.ObjectTreeRenderer;
+import com.github.monster860.fastdmm.editing.ui.TileInspectorPanel;
 import com.github.monster860.fastdmm.objtree.InstancesRenderer;
 import com.github.monster860.fastdmm.objtree.ModifiedType;
 import com.github.monster860.fastdmm.objtree.ObjInstance;
@@ -91,6 +92,8 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 	private Canvas canvas;
     // UI control for Z navigation
     private JSpinner zSpinner;
+	// Right-side inspector
+	private TileInspectorPanel inspectorPanel;
 
 	// Map tools (exclusive)
 	private JToggleButton btnSelectRegion;
@@ -112,7 +115,7 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 	private JMenuItem menuItemMapImage;
 	private JMenuItem menuItemUndo;
 	private JMenuItem menuItemRedo;
-	private JMenuItem menuItemAttachedTiles;
+	// Removed menuItemAttachedTiles; invoked from object tree context menu instead
 
 	private JPopupMenu currPopup;
 
@@ -306,6 +309,10 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 			editorPanel = new JPanel();
 			editorPanel.setLayout(new BorderLayout());
 			editorPanel.add(canvas, BorderLayout.CENTER);
+
+			// Right inspector dock (initially empty/disabled)
+			inspectorPanel = new TileInspectorPanel(FastDMM.this);
+			editorPanel.add(inspectorPanel, BorderLayout.EAST);
 			
 			editorTabs = new JTabbedPane();
 			editorTabs.addChangeListener(new ChangeListener() {
@@ -471,11 +478,7 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 
 			menu.addSeparator();
 
-			menuItemAttachedTiles = new JMenuItem("Attached Tiles…");
-		 menuItemAttachedTiles.setActionCommand("attached_tiles");
-		 menuItemAttachedTiles.addActionListener(FastDMM.this);
-		 menuItemAttachedTiles.setEnabled(false);
-		 menu.add(menuItemAttachedTiles);
+			// Attached Tiles moved to Objects tree context menu
 
 			ButtonGroup placementGroup = new ButtonGroup();
 
@@ -637,14 +640,6 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 				SelectPlacementMode spm = (SelectPlacementMode) placementMode;
 				spm.clearSelection();
 			}
-		} else if ("attached_tiles".equals(e.getActionCommand())) {
-			if (selectedInstance == null) {
-				JOptionPane.showMessageDialog(this, "Select an object instance first.");
-				return;
-			}
-			String key = AttachedTileService.normalizeKey(selectedInstance);
-			AttachedTilesDialog dlg = new AttachedTilesDialog(this, attachedService, key);
-			dlg.setVisible(true);
 		} else if ("expand".equals(e.getActionCommand())) {
 			if (dmm == null)
 				return;
@@ -742,7 +737,7 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 						menuRecent.setEnabled(true);
 						menuRecentMaps.setEnabled(true);
 						menuRecentMaps.setVisible(true);
-						menuItemAttachedTiles.setEnabled(true);
+						// Context menu is always available on the Objects tree; nothing to enable here
 						areMenusFrozen = false;
 					});
 				} catch (Exception ex) {
@@ -1117,7 +1112,13 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 									menu.setFont(menu.getFont().deriveFont(Font.BOLD)); // Make it bold if is visible by the filter.
 								currPopup.add(menu);
 	
-								JMenuItem item = new JMenuItem("Make Active Object");
+								JMenuItem item = new JMenuItem("Inspect…");
+								item.addActionListener(ev -> {
+									inspectorPanel.inspect(l, i);
+								});
+								menu.add(item);
+
+								item = new JMenuItem("Make Active Object");
 								item.addActionListener(new MakeActiveObjectListener(this, l, i));
 								menu.add(item);
 	
@@ -1142,6 +1143,22 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 						});
 					}
 				} else if (Mouse.getEventButton() == 0) {
+					// Auto-open inspector on left-click in Select mode
+					if (placementMode instanceof SelectPlacementMode && key != null) {
+						TileInstance tInstance = dmm.instances.get(key);
+						if (tInstance != null) {
+							List<ObjInstance> layerSorted = tInstance.getLayerSorted();
+							ObjInstance top = null;
+							for (int idx = layerSorted.size() - 1; idx >= 0; idx--) {
+								ObjInstance cand = layerSorted.get(idx);
+								if (cand != null) { top = cand; break; }
+							}
+							ObjInstance toInspect = top;
+							if (toInspect != null) {
+								SwingUtilities.invokeLater(() -> inspectorPanel.inspect(l, toInspect));
+							}
+						}
+					}
 					currPlacementHandler = placementMode.getPlacementHandler(this, selectedInstance, l);
 					if (currPlacementHandler != null)
 						currPlacementHandler.init(this, selectedInstance, l);
