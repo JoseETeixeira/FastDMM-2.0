@@ -16,8 +16,13 @@ public class DefaultPlacementMode implements PlacementMode {
 	public PlacementHandler getPlacementHandler(FastDMM editor, ObjInstance instance, Location initialLocation) {
 		if(instance == null)
 			return null;
-		
-		if(editor.isCtrlPressed)
+		// Forced modes from toolbar buttons take precedence
+		if(editor.forceDirectional)
+			return new DirectionalPlacementHandler();
+		else if(editor.forceBlock)
+			return new BlockPlacementHandler();
+		// Fallback to modifier keys
+		else if(editor.isCtrlPressed)
 			return new DirectionalPlacementHandler();
 		else if(editor.isShiftPressed)
 			return new BlockPlacementHandler();

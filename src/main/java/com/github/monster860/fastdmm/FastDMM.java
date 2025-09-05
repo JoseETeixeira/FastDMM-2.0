@@ -18,6 +18,7 @@ import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.event.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.tree.TreePath;
 
 import com.github.monster860.fastdmm.dmirender.DMI;
 import com.github.monster860.fastdmm.dmirender.IconState;
@@ -32,6 +33,7 @@ import com.github.monster860.fastdmm.editing.placement.DeletePlacementMode;
 import com.github.monster860.fastdmm.editing.placement.PlacementHandler;
 import com.github.monster860.fastdmm.editing.placement.PlacementMode;
 import com.github.monster860.fastdmm.editing.placement.SelectPlacementMode;
+import com.github.monster860.fastdmm.editing.placement.PickerPlacementMode;
 import com.github.monster860.fastdmm.editing.ui.EditorTabComponent;
 import com.github.monster860.fastdmm.editing.ui.EmptyTabPanel;
 import com.github.monster860.fastdmm.editing.ui.NoDmeTreeModel;
@@ -90,6 +92,16 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
     // UI control for Z navigation
     private JSpinner zSpinner;
 
+	// Map tools (exclusive)
+	private JToggleButton btnSelectRegion;
+	private JToggleButton btnSelectSingle;
+	private JToggleButton btnPencil;
+	private JToggleButton btnEraser;
+	private JToggleButton btnRectangle;
+	private JToggleButton btnAdjacent;
+	private JToggleButton btnPicker;
+	private ButtonGroup toolGroup;
+
 	private JMenuBar menuBar;
 	private JMenu menuRecent;
 	private JMenu menuRecentMaps;
@@ -121,8 +133,53 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 	public boolean isCtrlPressed = false;
 	public boolean isShiftPressed = false;
 	public boolean isAltPressed = false;
+	// Tool forcing flags
+	public boolean forceDirectional = false;
+	public boolean forceBlock = false;
 
 	private boolean areMenusFrozen = false;
+
+	// Switch active tool and placement mode
+	private void setTool(String tool) {
+		if (placementMode != null) placementMode.flush(this);
+		selMode = false;
+		forceDirectional = false;
+		forceBlock = false;
+		// Reflect button state if toolbar is initialized
+		if (btnSelectRegion != null) btnSelectRegion.setSelected("select-region".equals(tool));
+		if (btnSelectSingle != null) btnSelectSingle.setSelected("select-single".equals(tool));
+		if (btnPencil != null) btnPencil.setSelected("pencil".equals(tool));
+		if (btnEraser != null) btnEraser.setSelected("eraser".equals(tool));
+		if (btnRectangle != null) btnRectangle.setSelected("rectangle".equals(tool));
+		if (btnAdjacent != null) btnAdjacent.setSelected("adjacent".equals(tool));
+		if (btnPicker != null) btnPicker.setSelected("picker".equals(tool));
+		switch (tool) {
+			case "select-region":
+				placementMode = new SelectPlacementMode();
+				selMode = true;
+				break;
+			case "select-single":
+				placementMode = new SelectPlacementMode();
+				selMode = true;
+				break;
+			case "picker":
+				placementMode = new PickerPlacementMode();
+				selMode = false;
+				break;
+			case "eraser":
+				placementMode = new DeletePlacementMode();
+				break;
+			case "rectangle":
+				forceBlock = true;
+				// fallthrough
+			case "adjacent":
+				if ("adjacent".equals(tool)) forceDirectional = true;
+				// fallthrough
+			case "pencil":
+			default:
+				placementMode = new DefaultPlacementMode();
+		}
+	}
 
 	public static final void main(String[] args) throws IOException, LWJGLException {
 		try {
@@ -130,7 +187,7 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 		} catch (ClassNotFoundException | InstantiationException | UnsupportedLookAndFeelException
 				| IllegalAccessException e) {
 			e.printStackTrace();
-		}
+	}
 
 		FastDMM fastdmm = new FastDMM();
 
@@ -214,6 +271,31 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 			objTreeVis.addTreeSelectionListener(FastDMM.this);
 			ToolTipManager.sharedInstance().registerComponent(objTreeVis);
 			objTreeVis.setCellRenderer(new ObjectTreeRenderer(FastDMM.this));
+			// Right-click menu on object tree: open Attached Tiles for that node
+			objTreeVis.addMouseListener(new MouseAdapter() {
+				private void maybeShow(MouseEvent e) {
+					if (!e.isPopupTrigger()) return;
+					TreePath path = objTreeVis.getPathForLocation(e.getX(), e.getY());
+					if (path == null) return;
+					objTreeVis.setSelectionPath(path);
+					Object node = path.getLastPathComponent();
+					if (!(node instanceof ObjectTree.Item)) return;
+					JPopupMenu popup = new JPopupMenu();
+					popup.setLightWeightPopupEnabled(false);
+					JMenuItem attachItem = new JMenuItem("Attached Tiles...");
+					attachItem.addActionListener(ev -> {
+						ObjectTree.Item item = (ObjectTree.Item) node;
+						String key = AttachedTileService.normalizeKey(item);
+						AttachedTilesDialog dlg = new AttachedTilesDialog(FastDMM.this, attachedService, key);
+						dlg.setVisible(true);
+					});
+					popup.add(attachItem);
+					popup.show(objTreeVis, e.getX(), e.getY());
+				}
+
+				@Override public void mousePressed(MouseEvent e) { maybeShow(e); }
+				@Override public void mouseReleased(MouseEvent e) { maybeShow(e); }
+			});
 			objTreePanel.add(new JScrollPane(objTreeVis));
 
 			leftTabs = new JTabbedPane();
@@ -253,7 +335,45 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 		            }
 		        }
 		    });
-			editorPanel.add(editorTabs, BorderLayout.NORTH);
+			// Top bar: tabs + tool buttons
+			JPanel topBar = new JPanel(new BorderLayout());
+			topBar.add(editorTabs, BorderLayout.CENTER);
+			JToolBar toolBar = new JToolBar();
+			toolBar.setFloatable(false);
+			toolGroup = new ButtonGroup();
+			btnSelectRegion = new JToggleButton("Select");
+			btnPencil = new JToggleButton("Pencil");
+			btnEraser = new JToggleButton("Eraser");
+			btnRectangle = new JToggleButton("Rect");
+			btnPicker = new JToggleButton("Pick");
+			// Tooltips with shortcuts
+			btnSelectRegion.setToolTipText("Select (S)");
+			btnPencil.setToolTipText("Pencil (P)");
+			btnEraser.setToolTipText("Eraser (E)");
+			btnRectangle.setToolTipText("Fill rectangle (F)");
+			btnPicker.setToolTipText("Pick tile (I)");
+			// Group exclusivity
+			toolGroup.add(btnSelectRegion);
+			toolGroup.add(btnPencil);
+			toolGroup.add(btnEraser);
+			toolGroup.add(btnRectangle);
+			toolGroup.add(btnPicker);
+			// Listeners -> set placement mode
+			btnSelectRegion.addActionListener(e -> setTool("select-region"));
+			btnPencil.addActionListener(e -> setTool("pencil"));
+			btnEraser.addActionListener(e -> setTool("eraser"));
+			btnRectangle.addActionListener(e -> setTool("rectangle"));
+			btnPicker.addActionListener(e -> setTool("picker"));
+			// Default tool
+			btnPencil.setSelected(true);
+			// Assemble toolbar
+			toolBar.add(btnSelectRegion);
+			toolBar.add(btnPencil);
+			toolBar.add(btnEraser);
+			toolBar.add(btnRectangle);
+			toolBar.add(btnPicker);
+			topBar.add(toolBar, BorderLayout.EAST);
+			editorPanel.add(topBar, BorderLayout.NORTH);
 
 			getContentPane().add(editorPanel, BorderLayout.CENTER);
 			getContentPane().add(leftPanel, BorderLayout.WEST);
@@ -292,6 +412,7 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 			menuItemSave.setActionCommand("save");
 			menuItemSave.addActionListener(FastDMM.this);
 			menuItemSave.setEnabled(false);
+			menuItemSave.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK));
 			menu.add(menuItemSave);
 
 			JMenuItem menuItem = new JMenuItem("Open DME");
@@ -321,12 +442,16 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 			menuItemUndo.setActionCommand("undo");
 			menuItemUndo.addActionListener(FastDMM.this);
 			menuItemUndo.setEnabled(false);
+			// Ctrl+Z accelerator (works when Swing has focus)
+			menuItemUndo.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Z, InputEvent.CTRL_DOWN_MASK));
 			menu.add(menuItemUndo);
 
 			menuItemRedo = new JMenuItem("Redo", KeyEvent.VK_R);
 			menuItemRedo.setActionCommand("redo");
 			menuItemRedo.addActionListener(FastDMM.this);
 			menuItemRedo.setEnabled(false);
+			// Ctrl+Y accelerator (works when Swing has focus)
+			menuItemRedo.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Y, InputEvent.CTRL_DOWN_MASK));
 			menu.add(menuItemRedo);
 			
 			menu = new JMenu("Options");
@@ -347,10 +472,10 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 			menu.addSeparator();
 
 			menuItemAttachedTiles = new JMenuItem("Attached Tiles…");
-			menuItemAttachedTiles.setActionCommand("attached_tiles");
-			menuItemAttachedTiles.addActionListener(FastDMM.this);
-			menuItemAttachedTiles.setEnabled(false);
-			menu.add(menuItemAttachedTiles);
+		 menuItemAttachedTiles.setActionCommand("attached_tiles");
+		 menuItemAttachedTiles.addActionListener(FastDMM.this);
+		 menuItemAttachedTiles.setEnabled(false);
+		 menu.add(menuItemAttachedTiles);
 
 			ButtonGroup placementGroup = new ButtonGroup();
 
@@ -856,7 +981,7 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 				viewportZoom = 128;
 		}
 
-		while (Keyboard.next()) {
+	while (Keyboard.next()) {
 			if (Keyboard.getEventKeyState()) {
 				if (Keyboard.getEventKey() == Keyboard.KEY_LCONTROL || Keyboard.getEventKey() == Keyboard.KEY_RCONTROL)
 					isCtrlPressed = true;
@@ -864,6 +989,28 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 					isShiftPressed = true;
 				if (Keyboard.getEventKey() == Keyboard.KEY_LMENU || Keyboard.getEventKey() == Keyboard.KEY_RMENU)
 					isAltPressed = true;
+				// Undo/Redo when canvas has focus
+				if (isCtrlPressed && Keyboard.getEventKey() == Keyboard.KEY_Z) {
+					SwingUtilities.invokeLater(this::undoAction);
+				} else if (isCtrlPressed && Keyboard.getEventKey() == Keyboard.KEY_Y) {
+					SwingUtilities.invokeLater(this::redoAction);
+				}
+				// Tool hotkeys
+				if (Keyboard.getEventKey() == Keyboard.KEY_S) {
+					SwingUtilities.invokeLater(() -> setTool("select-region"));
+				} else if (Keyboard.getEventKey() == Keyboard.KEY_V) {
+					SwingUtilities.invokeLater(() -> setTool("select-single"));
+				} else if (Keyboard.getEventKey() == Keyboard.KEY_P) {
+					SwingUtilities.invokeLater(() -> setTool("pencil"));
+				} else if (Keyboard.getEventKey() == Keyboard.KEY_E) {
+					SwingUtilities.invokeLater(() -> setTool("eraser"));
+				} else if (Keyboard.getEventKey() == Keyboard.KEY_F) {
+					SwingUtilities.invokeLater(() -> setTool("rectangle"));
+				} else if (Keyboard.getEventKey() == Keyboard.KEY_A) {
+					SwingUtilities.invokeLater(() -> setTool("adjacent"));
+				} else if (Keyboard.getEventKey() == Keyboard.KEY_I) {
+					SwingUtilities.invokeLater(() -> setTool("picker"));
+				}
 				// Z navigation with PageUp/PageDown
 				if (dmm != null) {
 					if (Keyboard.getEventKey() == Keyboard.KEY_PRIOR) { // Page Up
@@ -883,6 +1030,29 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 					isShiftPressed = false;
 				if (Keyboard.getEventKey() == Keyboard.KEY_LMENU || Keyboard.getEventKey() == Keyboard.KEY_RMENU)
 					isAltPressed = false;
+			}
+		}
+
+		// Delete key deletes current selection (SelectPlacementMode)
+		if (Keyboard.isKeyDown(Keyboard.KEY_DELETE)) {
+			if (placementMode instanceof SelectPlacementMode) {
+				SelectPlacementMode spm = (SelectPlacementMode) placementMode;
+				// Reuse existing delete logic
+				if (!spm.selection.isEmpty()) {
+					Map<Location, String[]> changes = new HashMap<Location, String[]>();
+					for (Location l : spm.selection) {
+						String key = dmm.map.get(l);
+						if (key == null) continue;
+						TileInstance ti = dmm.instances.get(key);
+						if (ti == null) continue;
+						String newKey = ti.deleteAllInFilter(this);
+						String[] keys = { key, newKey };
+						changes.put(l, keys);
+						dmm.putMap(l, newKey);
+					}
+					addToUndoStack(dmm.popDiffs());
+					spm.clearSelection();
+				}
 			}
 		}
 

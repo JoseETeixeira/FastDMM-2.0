@@ -8,6 +8,7 @@ import com.github.monster860.fastdmm.objtree.ObjectTree.Item;
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.tree.TreeModel;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 import java.awt.*;
@@ -21,6 +22,7 @@ public class ObjectPickerDialog extends JDialog {
     private final FastDMM editor;
     private final JTextField search = new JTextField();
     private final JTree tree;
+    private final TreeModel baseModel;
     private List<String> result = new ArrayList<>();
 
     public ObjectPickerDialog(Frame owner, FastDMM editor) {
@@ -28,11 +30,13 @@ public class ObjectPickerDialog extends JDialog {
         this.editor = editor;
         setMinimumSize(new Dimension(500, 600));
 
-        // Build tree using the live ObjectTree model
-        tree = new JTree(editor.objTree);
+    // Build tree using the live ObjectTree model
+    tree = new JTree(editor.objTree);
+    baseModel = editor.objTree;
         tree.setCellRenderer(new ObjectTreeRenderer(editor));
         tree.getSelectionModel().setSelectionMode(TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION);
-        expandRoot();
+    // Start collapsed: only show top-level roots
+    collapseAll();
 
         buildUI();
     }
@@ -79,29 +83,21 @@ public class ObjectPickerDialog extends JDialog {
         });
     }
 
-    private void expandRoot() {
-        for (int i = 0; i < tree.getRowCount(); i++) {
-            tree.expandRow(i);
-        }
+    private void collapseAll() {
+        for (int i = tree.getRowCount() - 1; i >= 1; i--) tree.collapseRow(i);
     }
 
     private void applyFilter(String q) {
         String query = q == null ? "" : q.trim().toLowerCase();
         if (query.isEmpty()) {
+            tree.setModel(baseModel);
             tree.clearSelection();
+            collapseAll();
             return;
         }
-        // Expand all to make matches visible
+        // Wrap the model with a filter that only exposes matching nodes
+        tree.setModel(new FilteredTreeModel(editor.objTree, query));
         expandAll();
-        // Select the first item whose path contains the query
-        Item match = findFirstMatch(query);
-        if (match != null) {
-            TreePath tp = buildPath(match);
-            if (tp != null) {
-                tree.setSelectionPath(tp);
-                tree.scrollPathToVisible(tp);
-            }
-        }
     }
 
     private void expandAll() {
@@ -142,5 +138,57 @@ public class ObjectPickerDialog extends JDialog {
 
     public List<String> getSelectedTypePaths() {
         return result;
+    }
+
+    /**
+     * TreeModel that filters ObjectTree items by a case-insensitive substring match on their type path.
+     * Only nodes that match or have matching descendants are exposed.
+     */
+    private static class FilteredTreeModel implements TreeModel {
+        private final ObjectTree base;
+        private final String q;
+
+        FilteredTreeModel(ObjectTree base, String queryLower) {
+            this.base = base;
+            this.q = queryLower;
+        }
+
+        @Override public Object getRoot() { return base.getRoot(); }
+        @Override public Object getChild(Object parent, int index) { return filteredChildren(parent).get(index); }
+        @Override public int getChildCount(Object parent) { return filteredChildren(parent).size(); }
+        @Override public boolean isLeaf(Object node) { return filteredChildren(node).isEmpty(); }
+        @Override public void valueForPathChanged(TreePath path, Object newValue) { /* no-op */ }
+        @Override public int getIndexOfChild(Object parent, Object child) { return filteredChildren(parent).indexOf(child); }
+        @Override public void addTreeModelListener(javax.swing.event.TreeModelListener l) { /* no dynamic changes */ }
+        @Override public void removeTreeModelListener(javax.swing.event.TreeModelListener l) { }
+
+        private java.util.List<Object> filteredChildren(Object parent) {
+            java.util.List<Object> out = new java.util.ArrayList<>();
+            if (parent == base) {
+                int count = base.getChildCount(parent);
+                for (int i = 0; i < count; i++) {
+                    Object ch = base.getChild(parent, i);
+                    if (matchesOrHasMatches(ch)) out.add(ch);
+                }
+            } else if (parent instanceof ObjectTree.Item) {
+                ObjectTree.Item it = (ObjectTree.Item) parent;
+                for (ObjectTree.Item sub : it.subtypes) {
+                    if (matchesOrHasMatches(sub)) out.add(sub);
+                }
+            }
+            return out;
+        }
+
+        private boolean matchesOrHasMatches(Object node) {
+            if (node instanceof ObjectTree.Item) {
+                ObjectTree.Item it = (ObjectTree.Item) node;
+                if (it.path != null && it.path.toLowerCase().contains(q)) return true;
+                for (ObjectTree.Item sub : it.subtypes) if (matchesOrHasMatches(sub)) return true;
+            } else if (node == base) {
+                int count = base.getChildCount(node);
+                for (int i = 0; i < count; i++) if (matchesOrHasMatches(base.getChild(node, i))) return true;
+            }
+            return false;
+        }
     }
 }

@@ -75,6 +75,17 @@ public class IconSubstate implements Icon {
 			cachedScaled = new Scaled(this);
 		return cachedScaled;
 	}
+
+	// New: explicit scaling factor
+	public Icon getScaled(float scale) {
+		return new Scaled(this, scale);
+	}
+
+	// New: scale to a target height in pixels
+	public Icon getScaledToHeight(int targetHeightPx) {
+		float scale = targetHeightPx / (float) dmi.height;
+		return new Scaled(this, scale);
+	}
 	
 	public static class Scaled implements Icon {
 		IconSubstate parent;
@@ -82,6 +93,10 @@ public class IconSubstate implements Icon {
 		public Scaled(IconSubstate parent) {
 			this.parent = parent;
 			scalingFactor = 16f / parent.dmi.height;
+		}
+		public Scaled(IconSubstate parent, float scale) {
+			this.parent = parent;
+			this.scalingFactor = scale;
 		}
 		
 		@Override
