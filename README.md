@@ -13,6 +13,8 @@ FastDMM is an alternative map editor for BYOND that is designed to be more flexi
 - Prevents large diffs by minimizing changes.
 - Randomizes keys to prevent merge conflicts.
 - Requires no external dependencies! Just run a single `.jar` file!
+- Random tile placement tool (% chance of spawning)
+- Adjacent tiles (place tiles that complete each other)! Right click a node in the Object tab and select "Adjacent Tiles"
 
 # Requirements
 
@@ -34,13 +36,13 @@ FastDMM uses [Gradle](https://docs.gradle.org/current/userguide/userguide.html) 
 The project uses the `us.kirchmeier.capsule` plugin for packing the source and dependencies into a fully runnable JAR. Use this to generate a jar, which will reside in /build/libs:
 
 ```
-gradlew fatCapsule
+.\gradlew fatCapsule
 ```
 
 In order to run the project you can replace `gradle fatCapsule` with `gradle run`, as shown below.
 
 ```
-gradlew run
+.\gradlew run
 ```
 
 # License
