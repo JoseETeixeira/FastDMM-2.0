@@ -30,6 +30,14 @@ public class MoveFloatingSelectionPlacementHandler implements PlacementHandler {
 
 	@Override
 	public void finalizePlacement() {
+		if(!(editor.placementMode instanceof SelectPlacementMode))
+			return;
+		SelectPlacementMode mode = (SelectPlacementMode)editor.placementMode;
+		if(mode.floatSelect != null) {
+			// Anchor moved selection to the map and clear it to avoid ghost overlays
+			mode.floatSelect.anchor(editor.dmm);
+			mode.floatSelect = null;
+		}
 	}
 
 	@Override

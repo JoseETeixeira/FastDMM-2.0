@@ -1632,7 +1632,9 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 	}
 	
 	public boolean inFilter(ObjInstance i) {
-		boolean valid = false;
+		// Nulls do not match any filter; callers that need to drop nulls must guard separately
+		if (i == null) return false;
+	boolean valid = false;
 		synchronized (filters) {
 			for (String s : filters) {
 				boolean newValid = true;
@@ -1641,7 +1643,7 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 					newValid = false; 
 				}
 					
-				if(i.toString().startsWith(s)) {
+		if(i.toString().startsWith(s)) {
 					valid = newValid;
 				}
 			}

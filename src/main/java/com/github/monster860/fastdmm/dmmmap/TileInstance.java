@@ -42,6 +42,7 @@ public class TileInstance {
 		StringBuilder sb = new StringBuilder();
 		boolean isFirst = true;
 		for(ObjInstance obj : objs) {
+			if (obj == null) continue; // skip nulls
 			if(isFirst)
 				isFirst = false;
 			else
@@ -55,6 +56,7 @@ public class TileInstance {
 		StringBuilder sb = new StringBuilder("\n");
 		boolean isFirst = true;
 		for(ObjInstance obj : objs) {
+			if (obj == null) continue; // skip nulls
 			if(isFirst)
 				isFirst = false;
 			else
@@ -233,6 +235,7 @@ public class TileInstance {
 		boolean hasTurf = false;
 		boolean hasArea = false;
 		for(ObjInstance obj : objs) {
+			if(obj == null) continue; // Skip nulls defensively
 			if(!editor.inFilter(obj)) {
 				ti.objs.add(obj);
 				if(obj.istype("/turf"))

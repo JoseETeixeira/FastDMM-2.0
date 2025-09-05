@@ -70,6 +70,7 @@ public class FloatingSelection {
 			
 			TileInstance newTi = new TileInstance(new ArrayList<>(), map);
 			for(ObjInstance obj : ti.objs) {
+				if (obj == null) continue; // skip nulls
 				if(editor.inFilter(obj)) {
 					newTi.objs.add(obj);
 				}
@@ -136,6 +137,7 @@ public class FloatingSelection {
 			boolean hasArea = false;
 			boolean hasTurf = false;
 			for(ObjInstance i : addTi.objs) {
+				if(i == null) continue;
 				if(i.istype("/turf")) {
 					hasTurf = true;
 				} else if(i.istype("/area")) {
@@ -144,12 +146,13 @@ public class FloatingSelection {
 			}
 			for(Iterator<ObjInstance> iterator = ti.objs.iterator(); iterator.hasNext(); ) {
 				ObjInstance i = iterator.next();
+				if(i == null) { iterator.remove(); continue; }
 				if(hasTurf && i.istype("/turf"))
 					iterator.remove();
 				else if(hasArea && i.istype("/area"))
 					iterator.remove();
 			}
-			ti.objs.addAll(addTi.objs);
+			for (ObjInstance i : addTi.objs) { if (i != null) ti.objs.add(i); }
 			ti.sortObjs();			
 			String newKey = map.getKeyForInstance(ti);
 			String[] keys = {key, newKey};
@@ -159,6 +162,11 @@ public class FloatingSelection {
 			}
 		}
 		map.editor.addToUndoStack(map.popDiffs());
+		// Clear any previous rectangle selection so it doesn't appear ghosted after anchoring
+		if (map.editor.placementMode instanceof com.github.monster860.fastdmm.editing.placement.SelectPlacementMode) {
+			com.github.monster860.fastdmm.editing.placement.SelectPlacementMode spm = (com.github.monster860.fastdmm.editing.placement.SelectPlacementMode) map.editor.placementMode;
+			spm.clearSelection();
+		}
 	}
 	
 	public void toClipboard() {
