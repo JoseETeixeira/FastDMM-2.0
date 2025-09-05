@@ -15,6 +15,7 @@ FastDMM is an alternative map editor for BYOND that is designed to be more flexi
 - Requires no external dependencies! Just run a single `.jar` file!
 - Random tile placement tool (% chance of spawning)
 - Adjacent tiles (place tiles that complete each other)! Right click a node in the Object tab and select "Adjacent Tiles"
+- Prefabs; Quickly define a prefab (think map pieces) and paint it wherever
 
 # Requirements
 
