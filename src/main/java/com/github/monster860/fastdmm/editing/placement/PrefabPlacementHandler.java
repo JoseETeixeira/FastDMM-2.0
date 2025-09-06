@@ -31,13 +31,44 @@ public class PrefabPlacementHandler implements PlacementHandler {
         for (Map.Entry<Location, TileInstance> e : prefab.tiles.entrySet()) {
             Location rel = e.getKey();
             TileInstance ti = e.getValue();
+            if (ti == null || ti.objs == null) continue; // safety
             Location world = new Location(anchor.x + rel.x, anchor.y + rel.y, editor.dmm.storedZ);
             String oldKey = editor.dmm.map.get(world);
-            TileInstance copy = new TileInstance(new java.util.ArrayList<>(ti.objs), editor.dmm);
-            copy.prefabName = prefab.name;
-            copy.prefabRelX = rel.x;
-            copy.prefabRelY = rel.y;
-            String newKey = editor.dmm.getKeyForInstance(copy);
+            TileInstance existing = (oldKey != null) ? editor.dmm.instances.get(oldKey) : null;
+            java.util.List<com.github.monster860.fastdmm.objtree.ObjInstance> merged;
+            if (existing != null) {
+                if (existing.objs == null) existing.objs = new java.util.ArrayList<>();
+                merged = new java.util.ArrayList<>(existing.objs); // start with what's there
+                // Detect if prefab supplies a turf/area; if so, remove existing of that category before merge
+                boolean prefabHasTurf = false, prefabHasArea = false;
+                for (com.github.monster860.fastdmm.objtree.ObjInstance oi : ti.objs) {
+                    String t = oi.typeString();
+                    if (t != null) {
+                        if (t.startsWith("/turf")) prefabHasTurf = true; else if (t.startsWith("/area")) prefabHasArea = true;
+                    }
+                }
+                if (prefabHasTurf) {
+                    merged.removeIf(o -> { String t = o.typeString(); return t != null && t.startsWith("/turf"); });
+                }
+                if (prefabHasArea) {
+                    merged.removeIf(o -> { String t = o.typeString(); return t != null && t.startsWith("/area"); });
+                }
+                // Add prefab objects (including turf/area if present)
+                for (com.github.monster860.fastdmm.objtree.ObjInstance oi : ti.objs) {
+                    if (oi != null) merged.add(oi);
+                }
+            } else {
+                // No existing tile content; just copy prefab
+                merged = new java.util.ArrayList<>();
+                for (com.github.monster860.fastdmm.objtree.ObjInstance oi : ti.objs) if (oi != null) merged.add(oi);
+            }
+            // If merge produced identical composition to existing, skip
+            TileInstance newTi = new TileInstance(merged, editor.dmm);
+            newTi.prefabName = prefab.name;
+            newTi.prefabRelX = rel.x;
+            newTi.prefabRelY = rel.y;
+            String newKey = editor.dmm.getKeyForInstance(newTi);
+            if (oldKey != null && oldKey.equals(newKey)) continue; // no actual change
             editor.dmm.putMap(world, newKey);
             changes.put(world, new String[]{oldKey, newKey});
         }

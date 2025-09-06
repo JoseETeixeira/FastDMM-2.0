@@ -3,7 +3,6 @@ package com.github.monster860.fastdmm;
 import java.awt.BorderLayout;
 import java.awt.Canvas;
 import java.awt.Color;
-import java.awt.Component;
 import java.awt.Font;
 import java.awt.FlowLayout;
 import java.awt.Graphics2D;
@@ -150,15 +149,12 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 	public boolean forceDirectional = false;
 	public boolean forceBlock = false;
 	// Prefab one-shot placement arming
-	public boolean prefabArmed = false;
+	public boolean prefabArmed = false; // now acts as "prefab active" until user selects something else
 	public void deselectPrefab() {
 		prefabArmed = false;
 		if (prefabPanel != null) prefabPanel.clearSelection();
 		// If we're currently in prefab placement mode, revert to normal pencil tool
-		if (placementMode instanceof com.github.monster860.fastdmm.editing.placement.PrefabPlacementMode) {
-			// Use setTool so buttons/UI sync; since prefabArmed now false this will select DefaultPlacementMode
-			setTool("pencil");
-		}
+		// Do not auto revert tool here; user controls by selecting a different brush or prefab
 	}
 
 	private boolean areMenusFrozen = false;
@@ -1270,13 +1266,9 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 				if (Mouse.getEventButton() == 0 && currPlacementHandler != null) {
 					synchronized (this) {
 						currPlacementHandler.finalizePlacement();
-						prefabArmed = false; // disarm after one placement
 					}
 					currPlacementHandler = null;
-					// If we were in prefab placement mode, revert tool now
-					if (placementMode instanceof com.github.monster860.fastdmm.editing.placement.PrefabPlacementMode) {
-						setTool("pencil");
-					}
+					// Keep prefab placement mode active for continuous placement
 				}
 			}
 		}

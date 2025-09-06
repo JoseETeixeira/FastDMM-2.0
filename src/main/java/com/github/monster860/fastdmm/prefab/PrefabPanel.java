@@ -2,18 +2,12 @@ package com.github.monster860.fastdmm.prefab;
 
 import java.awt.BorderLayout;
 import java.awt.Dimension;
-import java.awt.GridLayout;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
+// Removed unused ActionEvent/ActionListener imports
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
-import java.util.List;
 
-import javax.swing.BorderFactory;
 import javax.swing.DefaultListModel;
-import javax.swing.JButton;
-import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -21,15 +15,11 @@ import javax.swing.JScrollPane;
 import javax.swing.JPopupMenu;
 import javax.swing.JMenuItem;
 import javax.swing.ListCellRenderer;
-import javax.swing.JSpinner;
-import javax.swing.JTextField;
-import javax.swing.SpinnerNumberModel;
-import javax.swing.SwingUtilities;
+// Removed unused spinner & SwingUtilities imports
 
 import com.github.monster860.fastdmm.FastDMM;
 import com.github.monster860.fastdmm.dmmmap.Location;
-import com.github.monster860.fastdmm.dmmmap.TileInstance;
-import com.github.monster860.fastdmm.objtree.ObjInstance;
+// Removed unused tile/object imports
 
 /** UI panel for managing prefabs: create/select/edit. */
 public class PrefabPanel extends JPanel {
@@ -68,7 +58,7 @@ public class PrefabPanel extends JPanel {
             if (!e.getValueIsAdjusting()) {
                 String sel = prefabList.getSelectedValue();
                 if (sel != null) {
-                    editor.prefabArmed = true; // one-shot arm
+                    editor.prefabArmed = true; // persistent until deselected by choosing another brush
                     editor.setTool("prefab:" + sel);
                 }
             }
@@ -101,37 +91,7 @@ public class PrefabPanel extends JPanel {
         refreshList();
     }
 
-    private void newPrefabDialog() {
-        if (manager == null) {
-            javax.swing.JOptionPane.showMessageDialog(this, "Prefab manager not ready yet (no project loaded).", "Prefabs", javax.swing.JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-        // Require active selection first
-        if (!(editor.placementMode instanceof com.github.monster860.fastdmm.editing.placement.SelectPlacementMode)) {
-            JOptionPane.showMessageDialog(this, "Switch to Select tool and highlight the region first.");
-            return;
-        }
-        com.github.monster860.fastdmm.editing.placement.SelectPlacementMode spm = (com.github.monster860.fastdmm.editing.placement.SelectPlacementMode) editor.placementMode;
-        if (spm.selection.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "No selection. Select tiles to turn into a prefab first.");
-            return;
-        }
-        JTextField name = new JTextField();
-        JPanel panel = new JPanel(new GridLayout(0,2,4,4));
-        panel.add(new JLabel("Name")); panel.add(name);
-        int r = JOptionPane.showConfirmDialog(this, panel, "Create Prefab from Selection", JOptionPane.OK_CANCEL_OPTION);
-        if (r == JOptionPane.OK_OPTION) {
-            Prefab p = manager.create(name.getText().trim(), 1, 1); // width/height will be overwritten by capture
-            captureFromSelection(p);
-            manager.save();
-            refreshList();
-            prefabList.setSelectedValue(p.name, true);
-        }
-    }
-
-    // Editing removed; updating placed instances automatically no longer supported via UI
-    private void editSelected() { }
-    private void useSelected() { }
+    // Removed unused legacy dialog & methods
 
     public void captureFromSelection(Prefab prefab) {
         if (!(editor.placementMode instanceof com.github.monster860.fastdmm.editing.placement.SelectPlacementMode)) {
