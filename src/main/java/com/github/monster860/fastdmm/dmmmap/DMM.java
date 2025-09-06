@@ -283,6 +283,7 @@ public class DMM {
 	public Random rand = new Random();
 	
 	public String getKeyForInstance(TileInstance ti) {
+		if (ti == null) return null;
 		if(instances.inverse().containsKey(ti)) {
 			return instances.inverse().get(ti);
 		}

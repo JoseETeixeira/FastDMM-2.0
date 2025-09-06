@@ -63,6 +63,8 @@ public class PrefabPlacementHandler implements PlacementHandler {
                 for (com.github.monster860.fastdmm.objtree.ObjInstance oi : ti.objs) if (oi != null) merged.add(oi);
             }
             // If merge produced identical composition to existing, skip
+            // Remove any null ObjInstances before creating TileInstance
+            merged.removeIf(o -> o == null);
             TileInstance newTi = new TileInstance(merged, editor.dmm);
             newTi.prefabName = prefab.name;
             newTi.prefabRelX = rel.x;

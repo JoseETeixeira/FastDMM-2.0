@@ -84,14 +84,16 @@ public abstract class DMMDiff implements Undoable {
 
 		@Override
 		protected void undoSingle(DMM dmm) {
-			dmm.instances.remove(key);
-			dmm.unusedKeys.add(key);
+			if (key == null || dmm == null) return;
+			if (dmm.instances != null) dmm.instances.remove(key);
+			if (dmm.unusedKeys != null && !dmm.unusedKeys.contains(key)) dmm.unusedKeys.add(key);
 		}
 
 		@Override
 		protected void redoSingle(DMM dmm) {
-			dmm.instances.put(key, ti);
-			dmm.unusedKeys.remove(key);
+			if (key == null || dmm == null || ti == null) return;
+			if (dmm.instances != null) dmm.instances.put(key, ti);
+			if (dmm.unusedKeys != null) dmm.unusedKeys.remove(key);
 		}
 		
 	}
