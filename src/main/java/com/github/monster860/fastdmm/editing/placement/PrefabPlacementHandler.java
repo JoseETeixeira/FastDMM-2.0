@@ -1,6 +1,5 @@
 package com.github.monster860.fastdmm.editing.placement;
 
-import java.util.HashMap;
 import java.util.Map;
 
 import com.github.monster860.fastdmm.FastDMM;
@@ -26,12 +25,13 @@ public class PrefabPlacementHandler implements PlacementHandler {
     }
 
     private void place() {
-        if (editor == null || editor.dmm == null) return;
-        HashMap<Location, String[]> changes = new HashMap<>();
+        if (editor == null || editor.dmm == null || prefab == null) return;
+        try {
         for (Map.Entry<Location, TileInstance> e : prefab.tiles.entrySet()) {
+            if (e == null) continue;
             Location rel = e.getKey();
             TileInstance ti = e.getValue();
-            if (ti == null || ti.objs == null) continue; // safety
+            if (rel == null || ti == null || ti.objs == null) continue; // safety
             Location world = new Location(anchor.x + rel.x, anchor.y + rel.y, editor.dmm.storedZ);
             String oldKey = editor.dmm.map.get(world);
             TileInstance existing = (oldKey != null) ? editor.dmm.instances.get(oldKey) : null;
@@ -69,8 +69,11 @@ public class PrefabPlacementHandler implements PlacementHandler {
             newTi.prefabRelY = rel.y;
             String newKey = editor.dmm.getKeyForInstance(newTi);
             if (oldKey != null && oldKey.equals(newKey)) continue; // no actual change
+            // Record map change explicitly (oldKey may be null meaning creation)
             editor.dmm.putMap(world, newKey);
-            changes.put(world, new String[]{oldKey, newKey});
+        }
+        } catch (Exception ex) {
+            ex.printStackTrace();
         }
         editor.addToUndoStack(editor.dmm.popDiffs());
     }
