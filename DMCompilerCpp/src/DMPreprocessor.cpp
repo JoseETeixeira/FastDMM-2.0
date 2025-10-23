@@ -428,7 +428,7 @@ bool DMPreprocessor::IncludeFile(const std::string& path, const Location& includ
     IncludedFiles_.insert(absolutePath);
     
     // Track .dmm files
-    if (path.size() >= 4 && path.substr(path.size() - 4) == ".dmm") {
+    if (path.size() >= 4 && (path.substr(path.size() - 4) == ".dmm" || path.substr(path.size() - 4) == ".dmp")) {
         IncludedMaps_.push_back(absolutePath);
     }
     
