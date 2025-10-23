@@ -9,6 +9,10 @@ namespace myg {
 
 class InputHandler;
 class ProjectManager;
+class Renderer;
+class Camera;
+class GUIManager;
+class MapManager;
 
 /**
  * Main application class for MYG Editor
@@ -76,6 +80,16 @@ private:
     // Project management
     std::unique_ptr<ProjectManager> project_manager_;
 
+    // Map management
+    std::unique_ptr<MapManager> map_manager_;
+
+    // Rendering
+    std::unique_ptr<Renderer> renderer_;
+    std::unique_ptr<Camera> camera_;
+
+    // GUI
+    std::unique_ptr<GUIManager> gui_manager_;
+
     /**
      * Process SDL events
      */
@@ -93,14 +107,15 @@ private:
     void Render();
 
     /**
-     * Initialize ImGui with SDL3 and OpenGL backends
+     * Handle menu callbacks
      */
-    bool InitializeImGui();
-
-    /**
-     * Shutdown ImGui
-     */
-    void ShutdownImGui();
+    void OnOpenProject();
+    void OnOpenMap();
+    void OnSaveMap();
+    void OnCompileProject();
+    void OnUndo();
+    void OnRedo();
+    void OnQuit();
 };
 
 } // namespace myg

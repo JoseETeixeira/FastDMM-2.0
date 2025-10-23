@@ -84,9 +84,9 @@
     - Handle missing DMI files gracefully with placeholder
     - _Requirements: 5.1, 5.5, 14.5_
 
-- [ ] 5. Implement map loading and data structures
+- [x] 5. Implement map loading and data structures
 
-  - [ ] 5.1 Create Map class with DMM file parsing
+  - [x] 5.1 Create Map class with DMM file parsing
 
     - Implement Load() to read DMM file format
     - Parse tile instance definitions (key = objects)
@@ -96,7 +96,7 @@
     - Build tiles* map (Location -> key) and instances* map (key -> TileInstance)
     - _Requirements: 4.1, 4.2, 15.1_
 
-  - [ ] 5.2 Implement TileInstance and ObjectInstance classes
+  - [x] 5.2 Implement TileInstance and ObjectInstance classes
 
     - Create TileInstance with vector of ObjectInstance
     - Implement FromString() to parse object definitions with variables
@@ -105,7 +105,7 @@
     - Implement ToString() for serialization back to DMM format
     - _Requirements: 4.2, 4.4_
 
-  - [ ] 5.3 Implement layer sorting for tile rendering
+  - [x] 5.3 Implement layer sorting for tile rendering
 
     - Add GetLayerSorted() to TileInstance
     - Sort objects by plane variable (primary)
@@ -114,16 +114,16 @@
     - Cache sorted result for performance
     - _Requirements: 5.3_
 
-  - [ ] 5.4 Create MapManager for multiple open maps
+  - [x] 5.4 Create MapManager for multiple open maps
     - Implement LoadMap() to create and load Map objects
     - Store open maps in vector with active map index
     - Implement SetActiveMap() to switch between tabs
     - Add CloseMap() to remove map from list
     - _Requirements: 4.5_
 
-- [ ] 6. Implement rendering system
+- [x] 6. Implement rendering system
 
-  - [ ] 6.1 Create Renderer class with OpenGL setup
+  - [x] 6.1 Create Renderer class with OpenGL setup
 
     - Compile vertex and fragment shaders for sprite rendering
     - Create VAO, VBO, EBO for quad rendering
@@ -131,7 +131,7 @@
     - Implement BeginFrame() and EndFrame() for render loop
     - _Requirements: 13.2_
 
-  - [ ] 6.2 Implement Camera class for viewport navigation
+  - [x] 6.2 Implement Camera class for viewport navigation
 
     - Add camera position (x, y) and zoom level
     - Implement ScreenToWorld() coordinate conversion
@@ -140,7 +140,7 @@
     - Clamp zoom between 8 and 128 pixels per tile
     - _Requirements: 6.1, 6.2, 6.4, 6.5_
 
-  - [ ] 6.3 Implement tile rendering with sprite compositing
+  - [x] 6.3 Implement tile rendering with sprite compositing
 
     - Create RenderMap() to iterate visible tiles
     - For each tile, call RenderTile() with TileInstance
@@ -152,7 +152,7 @@
     - Render sprite quad with texture
     - _Requirements: 5.3, 5.4_
 
-  - [ ] 6.4 Implement camera controls with mouse input
+  - [x] 6.4 Implement camera controls with mouse input
     - Handle middle mouse button drag to pan camera
     - Update camera position based on mouse delta
     - Handle mouse wheel scroll to zoom camera
@@ -160,9 +160,9 @@
     - Update viewport rendering each frame
     - _Requirements: 6.1, 6.2_
 
-- [ ] 7. Implement GUI system with ImGui
+- [x] 7. Implement GUI system with ImGui
 
-  - [ ] 7.1 Create GUIManager class with ImGui integration
+  - [x] 7.1 Create GUIManager class with ImGui integration
 
     - Initialize ImGui with SDL3 and OpenGL backends
     - Implement BeginFrame() to start ImGui frame
@@ -170,7 +170,7 @@
     - Set up ImGui style and fonts
     - _Requirements: 13.2_
 
-  - [ ] 7.2 Implement main menu bar
+  - [x] 7.2 Implement main menu bar
 
     - Create RenderMainMenuBar() with File, Edit, Project, View, Help menus
     - Add "File > Open Project" menu item
@@ -180,7 +180,7 @@
     - Add "Edit > Undo" and "Edit > Redo" menu items
     - _Requirements: 1.1, 2.1, 4.1, 9.1_
 
-  - [ ] 7.3 Implement object tree panel
+  - [x] 7.3 Implement object tree panel
 
     - Create RenderObjectTreePanel() to display type hierarchy
     - Render tree starting from root object
@@ -190,7 +190,7 @@
     - Handle node double-click to set active placement object
     - _Requirements: 7.1, 7.2, 7.4_
 
-  - [ ] 7.4 Implement inspector panel for tile details
+  - [x] 7.4 Implement inspector panel for tile details
 
     - Create RenderInspectorPanel() to show selected tile
     - Display list of objects on tile with type paths
@@ -198,7 +198,7 @@
     - Add click handler to highlight object in viewport
     - _Requirements: 11.2, 11.3, 11.4_
 
-  - [ ] 7.5 Implement status bar
+  - [x] 7.5 Implement status bar
 
     - Create RenderStatusBar() at bottom of window
     - Display current map file path
@@ -207,7 +207,7 @@
     - Display current Z-level
     - _Requirements: 6.3, 15.4_
 
-  - [ ] 7.6 Implement map tabs for multiple open maps
+  - [x] 7.6 Implement map tabs for multiple open maps
     - Create RenderMapTabs() with ImGui tab bar
     - Add tab for each open map with file name
     - Handle tab selection to switch active map
@@ -215,9 +215,9 @@
     - Show modified indicator (\*) on unsaved maps
     - _Requirements: 4.5_
 
-- [ ] 8. Implement file dialogs and user prompts
+- [x] 8. Implement file dialogs and user prompts
 
-  - [ ] 8.1 Implement file picker dialogs
+  - [x] 8.1 Implement file picker dialogs
 
     - Create ShowOpenProjectDialog() with .dme file filter
     - Create ShowOpenMapDialog() with .dmm file filter
@@ -225,7 +225,7 @@
     - Return selected file path to caller
     - _Requirements: 1.1, 4.1_
 
-  - [ ] 8.2 Implement compilation progress dialog
+  - [x] 8.2 Implement compilation progress dialog
 
     - Create ShowCompilationDialog() with progress bar
     - Display compilation status message
@@ -233,7 +233,7 @@
     - Allow cancellation (future enhancement)
     - _Requirements: 2.2_
 
-  - [ ] 8.3 Implement error dialogs
+  - [x] 8.3 Implement error dialogs
     - Create ShowErrorDialog() with title and message
     - Display scrollable text for long error messages
     - Add OK button to dismiss

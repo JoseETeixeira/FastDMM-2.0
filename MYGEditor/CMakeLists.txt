@@ -81,6 +81,12 @@ set(MYG_SOURCES
     src/ObjectTreeCache.cpp
     src/DMI.cpp
     src/DMICache.cpp
+    src/Map.cpp
+    src/TileInstance.cpp
+    src/MapManager.cpp
+    src/Renderer.cpp
+    src/Camera.cpp
+    src/GUIManager.cpp
 )
 
 # MYG Editor executable
