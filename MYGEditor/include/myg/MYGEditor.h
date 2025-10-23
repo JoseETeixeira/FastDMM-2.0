@@ -60,6 +60,21 @@ public:
     ProjectManager* GetProjectManager() { return project_manager_.get(); }
 
     /**
+     * Get the map manager
+     */
+    MapManager* GetMapManager() { return map_manager_.get(); }
+
+    /**
+     * Get the camera
+     */
+    Camera* GetCamera() { return camera_.get(); }
+
+    /**
+     * Get the GUI manager
+     */
+    GUIManager* GetGUIManager() { return gui_manager_.get(); }
+
+    /**
      * Set the window title
      */
     void SetWindowTitle(const std::string& title);
@@ -116,6 +131,18 @@ private:
     void OnUndo();
     void OnRedo();
     void OnQuit();
+
+    /**
+     * Handle viewport interaction
+     */
+    void OnViewportLeftClick(int screen_x, int screen_y);
+    void OnViewportRightClick(int screen_x, int screen_y);
+
+    /**
+     * Handle context menu actions
+     * @param action Action code (1=edit_vars, 2=delete, 3=move_top, 4=move_bottom)
+     */
+    void HandleContextMenuAction(int action);
 };
 
 } // namespace myg

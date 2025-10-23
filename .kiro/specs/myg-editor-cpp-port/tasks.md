@@ -240,9 +240,9 @@
     - Use for compilation errors and file I/O errors
     - _Requirements: 1.3, 2.4, 9.4_
 
-- [ ] 9. Implement map editing functionality
+- [x] 9. Implement map editing functionality
 
-  - [ ] 9.1 Implement object placement on tiles
+  - [x] 9.1 Implement object placement on tiles
 
     - Handle left mouse click in viewport
     - Convert screen coordinates to world tile coordinates
@@ -254,7 +254,7 @@
     - Update viewport rendering immediately
     - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5_
 
-  - [ ] 9.2 Implement tile context menu
+  - [x] 9.2 Implement tile context menu
 
     - Handle right mouse click in viewport
     - Display ImGui context menu at mouse position
@@ -264,7 +264,7 @@
     - Store selected tile and object for menu actions
     - _Requirements: 11.1, 11.5_
 
-  - [ ] 9.3 Implement variable editing dialog
+  - [x] 9.3 Implement variable editing dialog
     - Create variable editor dialog with ImGui
     - List all variables for selected object
     - Show current values with editable text inputs

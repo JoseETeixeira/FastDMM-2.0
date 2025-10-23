@@ -46,6 +46,16 @@ public:
     TileInstance* GetTile(int x, int y, int z);
     void SetTile(int x, int y, int z, TileInstance* tile);
 
+    /**
+     * Place an object on a tile at the specified location
+     * @param x X coordinate
+     * @param y Y coordinate
+     * @param z Z coordinate
+     * @param type_path Object type path to place
+     * @return true if placement succeeded
+     */
+    bool PlaceObject(int x, int y, int z, const std::string& type_path);
+
     const Bounds& GetBounds() const { return bounds_; }
     const std::string& GetFilePath() const { return file_path_; }
     bool IsModified() const { return modified_; }

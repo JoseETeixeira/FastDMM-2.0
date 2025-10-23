@@ -40,7 +40,7 @@ public:
     std::vector<ObjectInstance*> GetLayerSorted();
     ObjectInstance* GetArea();
 
-private:
+    // Make cache members public so Map can invalidate them
     mutable std::vector<ObjectInstance*> cached_sorted_;
     mutable ObjectInstance* cached_area_;
     mutable bool cache_valid_;

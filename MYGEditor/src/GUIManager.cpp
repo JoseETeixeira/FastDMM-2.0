@@ -7,6 +7,7 @@
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_opengl3.h>
 #include <iostream>
+#include <algorithm>
 
 // Include DMCompiler headers
 #include "DMObjectTree.h"
@@ -25,6 +26,16 @@ GUIManager::GUIManager()
     , show_error_dialog_(false)
     , show_compilation_dialog_(false)
     , compilation_progress_(0.0f)
+    , show_context_menu_(false)
+    , context_menu_x_(0)
+    , context_menu_y_(0)
+    , context_menu_tile_(nullptr)
+    , context_menu_selected_object_(-1)
+    , context_menu_object_tree_(nullptr)
+    , show_variable_editor_(false)
+    , variable_editor_object_(nullptr)
+    , variable_editor_object_tree_(nullptr)
+    , variable_editor_confirmed_(false)
 {
 }
 
@@ -649,6 +660,220 @@ void GUIManager::RenderErrorDialog() {
 
 void GUIManager::CloseErrorDialog() {
     show_error_dialog_ = false;
+}
+
+void GUIManager::ShowTileContextMenu(int screen_x, int screen_y, TileInstance* tile, ::DMCompiler::DMObjectTree* object_tree) {
+    show_context_menu_ = true;
+    context_menu_x_ = screen_x;
+    context_menu_y_ = screen_y;
+    context_menu_tile_ = tile;
+    context_menu_object_tree_ = object_tree;
+    context_menu_selected_object_ = -1;
+}
+
+int GUIManager::RenderTileContextMenu() {
+    if (!show_context_menu_ || !context_menu_tile_) {
+        return 0;
+    }
+
+    int action = 0;
+
+    // Open context menu popup on first frame
+    static bool popup_opened = false;
+    if (!popup_opened) {
+        ImGui::OpenPopup("TileContextMenu");
+        popup_opened = true;
+    }
+
+    // Set popup position
+    ImGui::SetNextWindowPos(ImVec2(static_cast<float>(context_menu_x_), static_cast<float>(context_menu_y_)), ImGuiCond_Appearing);
+    
+    if (ImGui::BeginPopup("TileContextMenu")) {
+        ImGui::Text("Tile Objects:");
+        ImGui::Separator();
+
+        // List all objects on the tile
+        for (size_t i = 0; i < context_menu_tile_->objects.size(); ++i) {
+            const auto& obj = context_menu_tile_->objects[i];
+            
+            bool is_selected = (context_menu_selected_object_ == static_cast<int>(i));
+            if (ImGui::Selectable(obj.type_path.c_str(), is_selected)) {
+                context_menu_selected_object_ = static_cast<int>(i);
+            }
+        }
+
+        ImGui::Separator();
+
+        // Context menu actions
+        if (context_menu_selected_object_ >= 0 && 
+            context_menu_selected_object_ < static_cast<int>(context_menu_tile_->objects.size())) {
+            
+            if (ImGui::MenuItem("Edit Variables")) {
+                action = 1;
+                show_context_menu_ = false;
+                ImGui::CloseCurrentPopup();
+            }
+
+            if (ImGui::MenuItem("Delete Object")) {
+                action = 2;
+                show_context_menu_ = false;
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::Separator();
+
+            if (ImGui::MenuItem("Move to Top")) {
+                action = 3;
+                show_context_menu_ = false;
+                ImGui::CloseCurrentPopup();
+            }
+
+            if (ImGui::MenuItem("Move to Bottom")) {
+                action = 4;
+                show_context_menu_ = false;
+                ImGui::CloseCurrentPopup();
+            }
+        } else {
+            ImGui::TextDisabled("Select an object first");
+        }
+
+        ImGui::EndPopup();
+    } else {
+        // Popup was closed
+        show_context_menu_ = false;
+        popup_opened = false;
+    }
+
+    return action;
+}
+
+ObjectInstance* GUIManager::GetContextMenuSelectedObject() {
+    if (!context_menu_tile_ || context_menu_selected_object_ < 0 || 
+        context_menu_selected_object_ >= static_cast<int>(context_menu_tile_->objects.size())) {
+        return nullptr;
+    }
+
+    return &context_menu_tile_->objects[context_menu_selected_object_];
+}
+
+void GUIManager::ShowVariableEditorDialog(ObjectInstance* object, ::DMCompiler::DMObjectTree* object_tree) {
+    if (!object) {
+        return;
+    }
+
+    show_variable_editor_ = true;
+    variable_editor_object_ = object;
+    variable_editor_object_tree_ = object_tree;
+    variable_editor_confirmed_ = false;
+
+    // Copy current variable values to editor
+    variable_editor_values_.clear();
+    for (const auto& [key, value] : object->vars) {
+        variable_editor_values_[key] = value;
+    }
+
+    // If no variables are set, add some common ones as empty
+    if (variable_editor_values_.empty()) {
+        variable_editor_values_["icon"] = "";
+        variable_editor_values_["icon_state"] = "";
+        variable_editor_values_["dir"] = "";
+        variable_editor_values_["name"] = "";
+    }
+}
+
+bool GUIManager::RenderVariableEditorDialog() {
+    if (!show_variable_editor_ || !variable_editor_object_) {
+        return false;
+    }
+
+    bool confirmed = false;
+
+    // Center the dialog
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_Appearing);
+
+    if (ImGui::Begin("Edit Variables", &show_variable_editor_, ImGuiWindowFlags_NoCollapse)) {
+        ImGui::Text("Object Type: %s", variable_editor_object_->type_path.c_str());
+        ImGui::Separator();
+
+        // Display editable variables
+        if (ImGui::BeginChild("VariableList", ImVec2(0, -40), true)) {
+            // Create a list of variable names for iteration
+            std::vector<std::string> var_names;
+            for (const auto& [key, value] : variable_editor_values_) {
+                var_names.push_back(key);
+            }
+
+            // Sort for consistent display
+            std::sort(var_names.begin(), var_names.end());
+
+            for (const auto& var_name : var_names) {
+                ImGui::PushID(var_name.c_str());
+
+                // Variable name label
+                ImGui::Text("%s:", var_name.c_str());
+                ImGui::SameLine();
+
+                // Variable value input
+                char buffer[256];
+                std::string& value = variable_editor_values_[var_name];
+                strncpy_s(buffer, sizeof(buffer), value.c_str(), _TRUNCATE);
+
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::InputText("##value", buffer, sizeof(buffer))) {
+                    value = buffer;
+                }
+
+                ImGui::PopID();
+            }
+
+            // Add new variable button
+            ImGui::Separator();
+            static char new_var_name[64] = "";
+            ImGui::Text("Add Variable:");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(150);
+            ImGui::InputText("##newvar", new_var_name, sizeof(new_var_name));
+            ImGui::SameLine();
+            if (ImGui::Button("Add") && strlen(new_var_name) > 0) {
+                variable_editor_values_[new_var_name] = "";
+                new_var_name[0] = '\0';
+            }
+        }
+        ImGui::EndChild();
+
+        // Buttons
+        ImGui::Separator();
+        float button_width = 100.0f;
+        float spacing = 10.0f;
+        float total_width = button_width * 2 + spacing;
+        ImGui::SetCursorPosX((ImGui::GetWindowWidth() - total_width) * 0.5f);
+
+        if (ImGui::Button("OK", ImVec2(button_width, 0))) {
+            // Apply changes to the object
+            variable_editor_object_->vars.clear();
+            for (const auto& [key, value] : variable_editor_values_) {
+                if (!value.empty()) {
+                    variable_editor_object_->vars[key] = value;
+                }
+            }
+
+            confirmed = true;
+            variable_editor_confirmed_ = true;
+            show_variable_editor_ = false;
+        }
+
+        ImGui::SameLine(0, spacing);
+
+        if (ImGui::Button("Cancel", ImVec2(button_width, 0))) {
+            show_variable_editor_ = false;
+        }
+
+        ImGui::End();
+    }
+
+    return confirmed;
 }
 
 } // namespace myg

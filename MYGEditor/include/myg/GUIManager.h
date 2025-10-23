@@ -8,6 +8,7 @@ namespace myg {
 
 class MapManager;
 class TileInstance;
+class ObjectInstance;
 class Camera;
 
 } // namespace myg
@@ -158,6 +159,47 @@ public:
     const std::string& GetSelectedObjectPath() const { return selected_object_path_; }
 
     /**
+     * Show tile context menu at the specified screen position
+     * @param screen_x Screen X coordinate
+     * @param screen_y Screen Y coordinate
+     * @param tile The tile to show context menu for
+     * @param object_tree The object tree for variable resolution
+     */
+    void ShowTileContextMenu(int screen_x, int screen_y, TileInstance* tile, ::DMCompiler::DMObjectTree* object_tree);
+
+    /**
+     * Render the tile context menu if it's open
+     * This should be called every frame after BeginFrame()
+     * @return Context menu action (0=none, 1=edit_vars, 2=delete, 3=move_top, 4=move_bottom)
+     */
+    int RenderTileContextMenu();
+
+    /**
+     * Get the selected object index from the context menu
+     */
+    int GetContextMenuSelectedObjectIndex() const { return context_menu_selected_object_; }
+
+    /**
+     * Get the selected object from the context menu
+     * @return Pointer to the selected object, or nullptr if none selected
+     */
+    ObjectInstance* GetContextMenuSelectedObject();
+
+    /**
+     * Show variable editor dialog for an object
+     * @param object The object instance to edit
+     * @param object_tree The object tree for variable resolution
+     */
+    void ShowVariableEditorDialog(ObjectInstance* object, ::DMCompiler::DMObjectTree* object_tree);
+
+    /**
+     * Render the variable editor dialog if it's open
+     * This should be called every frame after BeginFrame()
+     * @return true if changes were confirmed, false otherwise
+     */
+    bool RenderVariableEditorDialog();
+
+    /**
      * Check if object tree panel is visible
      */
     bool IsObjectTreeVisible() const { return show_object_tree_; }
@@ -199,6 +241,21 @@ private:
     bool show_compilation_dialog_;
     std::string compilation_message_;
     float compilation_progress_;
+
+    // Context menu state
+    bool show_context_menu_;
+    int context_menu_x_;
+    int context_menu_y_;
+    TileInstance* context_menu_tile_;
+    int context_menu_selected_object_;
+    ::DMCompiler::DMObjectTree* context_menu_object_tree_;
+
+    // Variable editor state
+    bool show_variable_editor_;
+    ObjectInstance* variable_editor_object_;
+    ::DMCompiler::DMObjectTree* variable_editor_object_tree_;
+    std::unordered_map<std::string, std::string> variable_editor_values_;
+    bool variable_editor_confirmed_;
 
     /**
      * Render a single object tree node recursively

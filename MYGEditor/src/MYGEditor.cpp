@@ -204,7 +204,34 @@ void MYGEditor::Update(float delta_time) {
         camera_->ZoomAt(zoom_delta, mouse_x, mouse_y);
     }
 
-    // Application state updates will go here
+    // Handle viewport mouse clicks (only if ImGui is not capturing mouse)
+    ImGuiIO& io = ImGui::GetIO();
+    if (!io.WantCaptureMouse) {
+        // Left click for object placement
+        if (input_handler_->IsMouseButtonJustPressed(SDL_BUTTON_LEFT)) {
+            int mouse_x, mouse_y;
+            input_handler_->GetMousePosition(mouse_x, mouse_y);
+            OnViewportLeftClick(mouse_x, mouse_y);
+        }
+
+        // Right click for context menu
+        if (input_handler_->IsMouseButtonJustPressed(SDL_BUTTON_RIGHT)) {
+            int mouse_x, mouse_y;
+            input_handler_->GetMousePosition(mouse_x, mouse_y);
+            OnViewportRightClick(mouse_x, mouse_y);
+        }
+    }
+
+    // Handle keyboard shortcuts
+    if (input_handler_->IsUndoPressed()) {
+        OnUndo();
+    }
+    if (input_handler_->IsRedoPressed()) {
+        OnRedo();
+    }
+    if (input_handler_->IsSavePressed()) {
+        OnSaveMap();
+    }
 }
 
 void MYGEditor::Render() {
@@ -251,6 +278,18 @@ void MYGEditor::Render() {
 
     // Render dialogs (these need to be rendered every frame to stay open)
     gui_manager_->RenderErrorDialog();
+
+    // Render context menu and handle actions
+    int context_action = gui_manager_->RenderTileContextMenu();
+    if (context_action > 0) {
+        HandleContextMenuAction(context_action);
+    }
+
+    // Render variable editor dialog
+    if (gui_manager_->RenderVariableEditorDialog()) {
+        // Variables were changed, viewport needs to be updated
+        std::cout << "Variables updated" << std::endl;
+    }
 
     // End ImGui frame
     gui_manager_->EndFrame();
@@ -366,6 +405,96 @@ void MYGEditor::OnRedo() {
 
 void MYGEditor::OnQuit() {
     running_ = false;
+}
+
+void MYGEditor::OnViewportLeftClick(int screen_x, int screen_y) {
+    // Get current map
+    auto* current_map = map_manager_->GetCurrentMap();
+    if (!current_map) {
+        return;
+    }
+
+    // Get selected object from GUI
+    const std::string& selected_path = gui_manager_->GetSelectedObjectPath();
+    if (selected_path.empty()) {
+        return;
+    }
+
+    // Convert screen coordinates to world tile coordinates
+    int world_x, world_y;
+    camera_->ScreenToWorld(screen_x, screen_y, world_x, world_y);
+
+    // Get current Z-level (for now, use z=1 as default)
+    // TODO: Get actual Z-level from GUI when Z-level support is implemented
+    int world_z = 1;
+
+    // Place the object
+    if (current_map->PlaceObject(world_x, world_y, world_z, selected_path)) {
+        std::cout << "Placed " << selected_path << " at (" << world_x << ", " << world_y << ", " << world_z << ")" << std::endl;
+    } else {
+        std::cerr << "Failed to place object at (" << world_x << ", " << world_y << ", " << world_z << ")" << std::endl;
+    }
+}
+
+void MYGEditor::OnViewportRightClick(int screen_x, int screen_y) {
+    // Get current map
+    auto* current_map = map_manager_->GetCurrentMap();
+    if (!current_map) {
+        return;
+    }
+
+    // Convert screen coordinates to world tile coordinates
+    int world_x, world_y;
+    camera_->ScreenToWorld(screen_x, screen_y, world_x, world_y);
+
+    // Get current Z-level (for now, use z=1 as default)
+    int world_z = 1;
+
+    // Get the tile at this location
+    TileInstance* tile = current_map->GetTile(world_x, world_y, world_z);
+    if (!tile) {
+        return;
+    }
+
+    // Show context menu
+    gui_manager_->ShowTileContextMenu(screen_x, screen_y, tile, project_manager_->GetObjectTree());
+}
+
+void MYGEditor::HandleContextMenuAction(int action) {
+    int selected_object_index = gui_manager_->GetContextMenuSelectedObjectIndex();
+    
+    switch (action) {
+        case 1: { // Edit Variables
+            std::cout << "Edit Variables action selected for object index " << selected_object_index << std::endl;
+            
+            // Get the selected object from the context menu
+            ObjectInstance* selected_object = gui_manager_->GetContextMenuSelectedObject();
+            if (selected_object) {
+                gui_manager_->ShowVariableEditorDialog(selected_object, project_manager_->GetObjectTree());
+            } else {
+                gui_manager_->ShowErrorDialog("Error", "No object selected");
+            }
+            break;
+        }
+            
+        case 2: // Delete Object
+            std::cout << "Delete Object action selected for object index " << selected_object_index << std::endl;
+            // TODO: Implement delete functionality
+            break;
+            
+        case 3: // Move to Top
+            std::cout << "Move to Top action selected for object index " << selected_object_index << std::endl;
+            // TODO: Implement move to top functionality
+            break;
+            
+        case 4: // Move to Bottom
+            std::cout << "Move to Bottom action selected for object index " << selected_object_index << std::endl;
+            // TODO: Implement move to bottom functionality
+            break;
+            
+        default:
+            break;
+    }
 }
 
 } // namespace myg

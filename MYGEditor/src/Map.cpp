@@ -72,6 +72,94 @@ void Map::SetTile(int x, int y, int z, TileInstance* tile) {
     modified_ = true;
 }
 
+bool Map::PlaceObject(int x, int y, int z, const std::string& type_path) {
+    if (type_path.empty()) {
+        return false;
+    }
+
+    Location loc{x, y, z};
+    
+    // Get or create tile at this location
+    TileInstance* tile = GetTile(x, y, z);
+    
+    if (!tile) {
+        // Create a new tile instance
+        auto new_tile = std::make_unique<TileInstance>();
+        
+        // Allocate a key for this tile
+        std::string key = AllocateKey();
+        if (key.empty()) {
+            std::cerr << "Failed to allocate key for new tile" << std::endl;
+            return false;
+        }
+        
+        // Store the tile instance
+        tile = new_tile.get();
+        instances_[key] = std::move(new_tile);
+        tiles_[loc] = key;
+    }
+    
+    // Create the new object instance
+    ObjectInstance new_obj;
+    new_obj.type_path = type_path;
+    
+    // Determine object type category
+    bool is_turf = type_path.find("/turf") == 0;
+    bool is_area = type_path.find("/area") == 0;
+    bool is_obj = type_path.find("/obj") == 0;
+    bool is_mob = type_path.find("/mob") == 0;
+    
+    // Handle placement based on type
+    if (is_turf) {
+        // Replace existing turf
+        bool found_turf = false;
+        for (auto& obj : tile->objects) {
+            if (obj.IsType("/turf")) {
+                obj = new_obj;
+                found_turf = true;
+                break;
+            }
+        }
+        
+        if (!found_turf) {
+            // No existing turf, add it
+            tile->objects.push_back(new_obj);
+        }
+    }
+    else if (is_area) {
+        // Replace existing area
+        bool found_area = false;
+        for (auto& obj : tile->objects) {
+            if (obj.IsType("/area")) {
+                obj = new_obj;
+                found_area = true;
+                break;
+            }
+        }
+        
+        if (!found_area) {
+            // No existing area, add it
+            tile->objects.push_back(new_obj);
+        }
+    }
+    else if (is_obj || is_mob) {
+        // Append to object list
+        tile->objects.push_back(new_obj);
+    }
+    else {
+        // Unknown type, just append
+        tile->objects.push_back(new_obj);
+    }
+    
+    // Invalidate tile cache
+    tile->cached_sorted_.clear();
+    tile->cache_valid_ = false;
+    tile->cached_area_ = nullptr;
+    
+    modified_ = true;
+    return true;
+}
+
 void Map::PushUndoState(std::unique_ptr<UndoableAction> action) {
     // TODO: Implement in task 10
 }
