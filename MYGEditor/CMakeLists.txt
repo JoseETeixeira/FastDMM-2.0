@@ -79,6 +79,8 @@ set(MYG_SOURCES
     src/InputHandler.cpp
     src/ProjectManager.cpp
     src/ObjectTreeCache.cpp
+    src/DMI.cpp
+    src/DMICache.cpp
 )
 
 # MYG Editor executable

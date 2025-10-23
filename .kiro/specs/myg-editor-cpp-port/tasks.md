@@ -58,9 +58,9 @@
     - Load cache on project open if valid
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 2.5_
 
-- [-] 4. Implement DMI parsing and caching
+- [x] 4. Implement DMI parsing and caching
 
-  - [ ] 4.1 Create DMI class for sprite file parsing
+  - [x] 4.1 Create DMI class for sprite file parsing
 
     - Use stb_image to load PNG file data
     - Extract PNG tEXt chunk containing DMI metadata
@@ -69,7 +69,7 @@
     - Calculate sprite positions in sheet (x, y coordinates)
     - _Requirements: 14.1, 14.2, 14.3, 14.4, 5.2_
 
-  - [ ] 4.2 Implement OpenGL texture loading for DMI sprites
+  - [x] 4.2 Implement OpenGL texture loading for DMI sprites
 
     - Generate OpenGL texture ID
     - Upload PNG image data to GPU texture
@@ -77,7 +77,7 @@
     - Store texture ID in DMI object
     - _Requirements: 5.2, 13.2_
 
-  - [ ] 4.3 Create DMICache for managing loaded DMI files
+  - [x] 4.3 Create DMICache for managing loaded DMI files
     - Implement GetDMI() to load or retrieve cached DMI
     - Build file path from project directory and icon variable
     - Cache loaded DMI objects in unordered_map
