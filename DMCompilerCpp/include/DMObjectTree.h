@@ -110,6 +110,24 @@ public:
     /// @return true if object exists, false otherwise
     bool TryGetTypeId(const DreamPath& path, int& outTypeId);
     
+    /// Get a type by path with comprehensive resolution
+    /// Handles absolute paths (/mob/player), relative paths (player), and parent references
+    /// @param path The type path to resolve
+    /// @param context Optional context object for relative path resolution
+    /// @return Pointer to the DMObject if found, nullptr otherwise
+    DMObject* GetType(const DreamPath& path, DMObject* context = nullptr);
+    
+    /// Get a proc by name from an object, searching through inheritance chain
+    /// @param obj The object to search from
+    /// @param procName The name of the proc to find
+    /// @return Pointer to the first matching DMProc if found, nullptr otherwise
+    DMProc* GetProc(DMObject* obj, const std::string& procName);
+    
+    /// Get all variables for an object including inherited ones
+    /// @param obj The object to get variables for
+    /// @return Map of variable name to variable definition (includes inherited)
+    std::unordered_map<std::string, const DMVariable*> GetAllVariables(DMObject* obj) const;
+    
     /// Create a global variable at file scope
     /// @param outGlobal Variable object to populate with the created global
     /// @param type Optional type path constraint (e.g., /mob for a mob variable)

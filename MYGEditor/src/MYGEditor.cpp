@@ -256,7 +256,7 @@ void MYGEditor::Render() {
     callbacks.on_quit = [this]() { OnQuit(); };
 
     // Render GUI elements
-    gui_manager_->RenderMainMenuBar(callbacks);
+    gui_manager_->RenderMainMenuBar(callbacks, map_manager_->GetCurrentMap());
     gui_manager_->RenderObjectTreePanel(project_manager_->GetObjectTree());
     gui_manager_->RenderMapTabs(map_manager_.get());
     gui_manager_->RenderInspectorPanel(nullptr, project_manager_->GetObjectTree());

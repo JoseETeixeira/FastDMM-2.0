@@ -7,6 +7,7 @@
 namespace myg {
 
 class MapManager;
+class Map;
 class TileInstance;
 class ObjectInstance;
 class Camera;
@@ -75,8 +76,9 @@ public:
     /**
      * Render the main menu bar
      * @param callbacks Callbacks for menu actions
+     * @param current_map The currently active map (for undo/redo state)
      */
-    void RenderMainMenuBar(const MenuCallbacks& callbacks);
+    void RenderMainMenuBar(const MenuCallbacks& callbacks, Map* current_map = nullptr);
 
     /**
      * Render the object tree panel

@@ -121,7 +121,7 @@ void GUIManager::SetupStyle() {
     style.FrameBorderSize = 0.0f;
 }
 
-void GUIManager::RenderMainMenuBar(const MenuCallbacks& callbacks) {
+void GUIManager::RenderMainMenuBar(const MenuCallbacks& callbacks, Map* current_map) {
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("Open Project...", "Ctrl+Shift+O")) {
@@ -156,13 +156,17 @@ void GUIManager::RenderMainMenuBar(const MenuCallbacks& callbacks) {
         }
         
         if (ImGui::BeginMenu("Edit")) {
-            if (ImGui::MenuItem("Undo", "Ctrl+Z")) {
+            // Enable/disable undo based on map state
+            bool can_undo = current_map && current_map->CanUndo();
+            if (ImGui::MenuItem("Undo", "Ctrl+Z", false, can_undo)) {
                 if (callbacks.on_undo) {
                     callbacks.on_undo();
                 }
             }
             
-            if (ImGui::MenuItem("Redo", "Ctrl+Y")) {
+            // Enable/disable redo based on map state
+            bool can_redo = current_map && current_map->CanRedo();
+            if (ImGui::MenuItem("Redo", "Ctrl+Y", false, can_redo)) {
                 if (callbacks.on_redo) {
                     callbacks.on_redo();
                 }

@@ -101,6 +101,95 @@ bool DMObjectTree::TryGetTypeId(const DreamPath& path, int& outTypeId) {
     return false;
 }
 
+DMObject* DMObjectTree::GetType(const DreamPath& path, DMObject* context) {
+    // Handle absolute paths directly
+    if (path.GetPathType() == DreamPath::PathType::Absolute) {
+        DMObject* obj = nullptr;
+        if (TryGetDMObject(path, &obj)) {
+            return obj;
+        }
+        return nullptr;
+    }
+    
+    // Handle relative paths with context
+    if (context != nullptr) {
+        // Try combining with context path
+        DreamPath combinedPath = context->Path.Combine(path);
+        DMObject* obj = nullptr;
+        if (TryGetDMObject(combinedPath, &obj)) {
+            return obj;
+        }
+        
+        // Try upward search through parent chain
+        auto result = UpwardSearch(context->Path, path);
+        if (result.has_value()) {
+            if (TryGetDMObject(result.value(), &obj)) {
+                return obj;
+            }
+        }
+    }
+    
+    // Try as absolute path from root (for relative paths without context)
+    DreamPath absolutePath(DreamPath::PathType::Absolute, path.GetElements());
+    DMObject* obj = nullptr;
+    if (TryGetDMObject(absolutePath, &obj)) {
+        return obj;
+    }
+    
+    return nullptr;
+}
+
+DMProc* DMObjectTree::GetProc(DMObject* obj, const std::string& procName) {
+    if (!obj) {
+        return nullptr;
+    }
+    
+    // Get proc IDs from the object (searches inheritance chain)
+    const std::vector<int>* procIds = obj->GetProcs(procName);
+    if (procIds && !procIds->empty()) {
+        // Return the first proc (most derived)
+        int procId = (*procIds)[0];
+        if (procId >= 0 && procId < static_cast<int>(AllProcs.size())) {
+            return AllProcs[procId].get();
+        }
+    }
+    
+    return nullptr;
+}
+
+std::unordered_map<std::string, const DMVariable*> DMObjectTree::GetAllVariables(DMObject* obj) const {
+    std::unordered_map<std::string, const DMVariable*> allVars;
+    
+    if (!obj) {
+        return allVars;
+    }
+    
+    // Collect variables from parent chain (bottom-up so child overrides parent)
+    std::vector<DMObject*> chain;
+    DMObject* current = obj;
+    while (current != nullptr) {
+        chain.push_back(current);
+        current = current->Parent;
+    }
+    
+    // Add variables from root to leaf (so child overrides parent)
+    for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+        DMObject* ancestor = *it;
+        
+        // Add regular variables
+        for (const auto& [name, var] : ancestor->Variables) {
+            allVars[name] = &var;
+        }
+        
+        // Add variable overrides (these take precedence)
+        for (const auto& [name, var] : ancestor->VariableOverrides) {
+            allVars[name] = &var;
+        }
+    }
+    
+    return allVars;
+}
+
 int DMObjectTree::CreateGlobal(
     DMVariable& outGlobal,
     const std::optional<DreamPath>& type,

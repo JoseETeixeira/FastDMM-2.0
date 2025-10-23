@@ -95,128 +95,8 @@ DMPreprocessor::DMPreprocessor(DMCompiler* compiler)
 DMPreprocessor::~DMPreprocessor() = default;
 
 std::vector<Token> DMPreprocessor::Preprocess(const std::string& filePath) {
-    std::vector<Token> result;
-    
-    if (!IncludeFile(filePath, Location::Internal)) {
-        return result;
-    }
-    
-    while (!LexerStack_.empty()) {
-        Token token = GetNextToken();
-        
-        switch (token.Type) {
-            case TokenType::EndOfFile:
-                LexerStack_.pop();
-                if (!IncludeDirectoryStack_.empty()) {
-                    IncludeDirectoryStack_.pop();
-                }
-                if (!LexerStack_.empty()) {
-                    result.push_back(Token(TokenType::Newline, "\n", token.Loc));
-                }
-                break;
-                
-            case TokenType::Newline:
-                CanUseDirective_ = true;
-                if (CurrentLineContainsNonWhitespace_) {
-                    BufferedWhitespace_ = std::stack<Token>(); // Clear
-                    CurrentLineContainsNonWhitespace_ = false;
-                    result.push_back(token);
-                } else {
-                    BufferedWhitespace_ = std::stack<Token>(); // Clear without output
-                }
-                break;
-                
-            // Whitespace - buffer at start of line, emit immediately otherwise
-            case TokenType::DM_Preproc_Whitespace:
-                if (CurrentLineContainsNonWhitespace_) {
-                    result.push_back(token);
-                } else {
-                    BufferedWhitespace_.push(token);
-                }
-                break;
-            
-            // Preprocessor identifiers - try macro expansion first
-            case TokenType::DM_Preproc_Identifier:
-            case TokenType::Identifier: {
-                // Try macro expansion before outputting
-                if (TryExpandMacro(token)) {
-                    break;
-                }
-                
-                // Not a macro - flush buffered whitespace and output
-                while (!BufferedWhitespace_.empty()) {
-                    result.push_back(BufferedWhitespace_.top());
-                    BufferedWhitespace_.pop();
-                }
-                
-                CurrentLineContainsNonWhitespace_ = true;
-                result.push_back(token);
-                break;
-            }
-            
-            // Preprocessor directives
-            case TokenType::DM_Preproc_Include:
-                HandleIncludeDirective(token);
-                break;
-                
-            case TokenType::DM_Preproc_Define:
-                HandleDefineDirective(token);
-                break;
-                
-            case TokenType::DM_Preproc_Undefine:
-                HandleUndefineDirective(token);
-                break;
-                
-            case TokenType::DM_Preproc_If:
-                HandleIfDirective(token);
-                break;
-                
-            case TokenType::DM_Preproc_Ifdef:
-                HandleIfDefDirective(token);
-                break;
-                
-            case TokenType::DM_Preproc_Ifndef:
-                HandleIfNDefDirective(token);
-                break;
-                
-            case TokenType::DM_Preproc_Elif:
-                HandleElifDirective(token);
-                break;
-                
-            case TokenType::DM_Preproc_Else:
-                HandleElseDirective(token);
-                break;
-                
-            case TokenType::DM_Preproc_EndIf:
-                HandleEndIfDirective(token);
-                break;
-                
-            case TokenType::DM_Preproc_Error:
-                HandleErrorDirective(token);
-                break;
-                
-            case TokenType::DM_Preproc_Warning:
-                HandleWarningDirective(token);
-                break;
-                
-            case TokenType::DM_Preproc_Pragma:
-                HandlePragmaDirective(token);
-                break;
-                
-            default:
-                // Flush buffered whitespace
-                while (!BufferedWhitespace_.empty()) {
-                    result.push_back(BufferedWhitespace_.top());
-                    BufferedWhitespace_.pop();
-                }
-                
-                CurrentLineContainsNonWhitespace_ = true;
-                result.push_back(token);
-                break;
-        }
-    }
-    
-    return result;
+    // Use PreprocessFile for recursive preprocessing
+    return PreprocessFile(filePath, Location::Internal);
 }
 
 void DMPreprocessor::Define(const std::string& name, const std::string& value) {
@@ -428,7 +308,7 @@ bool DMPreprocessor::IncludeFile(const std::string& path, const Location& includ
     IncludedFiles_.insert(absolutePath);
     
     // Track .dmm files
-    if (path.size() >= 4 && (path.substr(path.size() - 4) == ".dmm" || path.substr(path.size() - 4) == ".dmp")) {
+    if (path.size() >= 4 && path.substr(path.size() - 4) == ".dmm") {
         IncludedMaps_.push_back(absolutePath);
     }
     
@@ -448,23 +328,240 @@ bool DMPreprocessor::IncludeFile(const std::string& path, const Location& includ
     return true;
 }
 
+std::vector<Token> DMPreprocessor::PreprocessFile(const std::string& path, const Location& includeLocation) {
+    namespace fs = std::filesystem;
+    
+    std::vector<Token> result;
+    
+    // Resolve to absolute path
+    std::string absolutePath;
+    try {
+        absolutePath = fs::absolute(path).string();
+    } catch (...) {
+        if (Compiler_) {
+            Compiler_->ForcedError(includeLocation, "Invalid file path: " + path);
+        }
+        return result;
+    }
+    
+    // Check if already included (prevent circular includes)
+    if (IncludedFiles_.find(absolutePath) != IncludedFiles_.end()) {
+        // Already included, skip to prevent circular includes
+        if (Compiler_ && Compiler_->GetSettings().Verbose) {
+            std::cout << "  Skipping already included file: " << absolutePath << std::endl;
+        }
+        return result;
+    }
+    
+    // Check if file exists
+    if (!fs::exists(path)) {
+        if (Compiler_) {
+            Compiler_->ForcedError(includeLocation, "File not found: " + path);
+        }
+        return result;
+    }
+    
+    // Read file content
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        if (Compiler_) {
+            Compiler_->ForcedError(includeLocation, "Failed to open file: " + path);
+        }
+        return result;
+    }
+    
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    std::string content = buffer.str();
+    
+    // Mark as included BEFORE processing to prevent circular includes
+    IncludedFiles_.insert(absolutePath);
+    
+    // Track .dmm files
+    if (path.size() >= 4 && path.substr(path.size() - 4) == ".dmm") {
+        IncludedMaps_.push_back(absolutePath);
+        // Don't preprocess map files, just mark them as included
+        return result;
+    }
+    
+    // Track .dmf files  
+    if (path.size() >= 4 && path.substr(path.size() - 4) == ".dmf") {
+        IncludedInterface_ = absolutePath;
+        // Don't preprocess interface files, just mark them as included
+        return result;
+    }
+    
+    // Verbose logging
+    if (Compiler_ && Compiler_->GetSettings().Verbose) {
+        std::cout << "  Including file: " << absolutePath << std::endl;
+    }
+    
+    // Create lexer for this file (with whitespace emission enabled for preprocessing)
+    auto lexer = std::make_unique<DMLexer>(absolutePath, content, true);
+    LexerStack_.push(std::move(lexer));
+    
+    // Track the directory of this file for FILE_DIR support
+    std::string directory = fs::path(absolutePath).parent_path().string();
+    IncludeDirectoryStack_.push(directory);
+    
+    // Process tokens from this file
+    bool processingThisFile = true;
+    while (!LexerStack_.empty() && processingThisFile) {
+        Token token = GetNextToken();
+        
+        switch (token.Type) {
+            case TokenType::EndOfFile:
+                // Check if this EOF is from the file we're processing
+                if (!LexerStack_.empty() && 
+                    LexerStack_.top()->GetCurrentLocation().SourceFile == absolutePath) {
+                    // We've finished processing this file
+                    LexerStack_.pop();
+                    if (!IncludeDirectoryStack_.empty()) {
+                        IncludeDirectoryStack_.pop();
+                    }
+                    processingThisFile = false;
+                } else {
+                    // This EOF is from an included file, pop it and continue
+                    LexerStack_.pop();
+                    if (!IncludeDirectoryStack_.empty()) {
+                        IncludeDirectoryStack_.pop();
+                    }
+                }
+                break;
+                
+            case TokenType::Newline:
+                CanUseDirective_ = true;
+                if (CurrentLineContainsNonWhitespace_) {
+                    BufferedWhitespace_ = std::stack<Token>(); // Clear
+                    CurrentLineContainsNonWhitespace_ = false;
+                    result.push_back(token);
+                } else {
+                    BufferedWhitespace_ = std::stack<Token>(); // Clear without output
+                }
+                break;
+                
+            // Whitespace - buffer at start of line, emit immediately otherwise
+            case TokenType::DM_Preproc_Whitespace:
+                if (CurrentLineContainsNonWhitespace_) {
+                    result.push_back(token);
+                } else {
+                    BufferedWhitespace_.push(token);
+                }
+                break;
+            
+            // Preprocessor identifiers - try macro expansion first
+            case TokenType::DM_Preproc_Identifier:
+            case TokenType::Identifier: {
+                // Try macro expansion before outputting
+                if (TryExpandMacro(token)) {
+                    break;
+                }
+                
+                // Not a macro - flush buffered whitespace and output
+                while (!BufferedWhitespace_.empty()) {
+                    result.push_back(BufferedWhitespace_.top());
+                    BufferedWhitespace_.pop();
+                }
+                
+                CurrentLineContainsNonWhitespace_ = true;
+                result.push_back(token);
+                break;
+            }
+            
+            // Preprocessor directives
+            case TokenType::DM_Preproc_Include:
+                HandleIncludeDirective(token, result);
+                break;
+                
+            case TokenType::DM_Preproc_Define:
+                HandleDefineDirective(token);
+                break;
+                
+            case TokenType::DM_Preproc_Undefine:
+                HandleUndefineDirective(token);
+                break;
+                
+            case TokenType::DM_Preproc_If:
+                HandleIfDirective(token);
+                break;
+                
+            case TokenType::DM_Preproc_Ifdef:
+                HandleIfDefDirective(token);
+                break;
+                
+            case TokenType::DM_Preproc_Ifndef:
+                HandleIfNDefDirective(token);
+                break;
+                
+            case TokenType::DM_Preproc_Elif:
+                HandleElifDirective(token);
+                break;
+                
+            case TokenType::DM_Preproc_Else:
+                HandleElseDirective(token);
+                break;
+                
+            case TokenType::DM_Preproc_EndIf:
+                HandleEndIfDirective(token);
+                break;
+                
+            case TokenType::DM_Preproc_Error:
+                HandleErrorDirective(token);
+                break;
+                
+            case TokenType::DM_Preproc_Warning:
+                HandleWarningDirective(token);
+                break;
+                
+            case TokenType::DM_Preproc_Pragma:
+                HandlePragmaDirective(token);
+                break;
+                
+            default:
+                // Flush buffered whitespace
+                while (!BufferedWhitespace_.empty()) {
+                    result.push_back(BufferedWhitespace_.top());
+                    BufferedWhitespace_.pop();
+                }
+                
+                CurrentLineContainsNonWhitespace_ = true;
+                result.push_back(token);
+                break;
+        }
+    }
+    
+    return result;
+}
+
 std::string DMPreprocessor::ResolvePath(const std::string& path, const std::string& currentFile) {
     namespace fs = std::filesystem;
     
+    // Normalize path separators (convert backslashes to forward slashes for consistency)
+    std::string normalizedPath = path;
+    std::replace(normalizedPath.begin(), normalizedPath.end(), '\\', '/');
+    
     // If absolute path, use it directly
-    if (fs::path(path).is_absolute()) {
-        return path;
+    if (fs::path(normalizedPath).is_absolute()) {
+        return normalizedPath;
     }
     
-    // Otherwise, resolve relative to current file
+    // Otherwise, resolve relative to current file's directory
     fs::path currentPath = fs::path(currentFile).parent_path();
-    fs::path resolvedPath = currentPath / path;
+    fs::path resolvedPath = currentPath / normalizedPath;
+    
+    // Normalize the resolved path
+    try {
+        resolvedPath = fs::canonical(resolvedPath);
+    } catch (const fs::filesystem_error&) {
+        // If canonical fails (file doesn't exist yet), just use the resolved path
+        resolvedPath = fs::absolute(resolvedPath);
+    }
     
     return resolvedPath.string();
 }
 
 // Directive handler implementations
-void DMPreprocessor::HandleIncludeDirective(const Token& token) {
+void DMPreprocessor::HandleIncludeDirective(const Token& token, std::vector<Token>& result) {
     Token includedFileToken = GetNextToken();
     
     // Skip whitespace
@@ -494,7 +591,13 @@ void DMPreprocessor::HandleIncludeDirective(const Token& token) {
         resolvedPath = ResolvePath(filePath, currentFile);
     }
     
-    IncludeFile(resolvedPath, token.Loc);
+    // Recursively preprocess the included file and insert its tokens
+    std::vector<Token> includedTokens = PreprocessFile(resolvedPath, token.Loc);
+    
+    // Insert the included tokens into the result
+    for (const auto& includedToken : includedTokens) {
+        result.push_back(includedToken);
+    }
 }
 
 void DMPreprocessor::HandleDefineDirective(const Token& token) {

@@ -13,6 +13,7 @@ add_executable(dm_compiler_tests
     test_statement_compiler.cpp
     test_dmmparser.cpp
     test_goto_forward_ref.cpp
+    example_compilation_tests.cpp
     test_main.cpp
 )
 
@@ -40,3 +41,4 @@ add_test(NAME BytecodeTests COMMAND dm_compiler_tests [bytecode])
 add_test(NAME ExprCompilerTests COMMAND dm_compiler_tests [exprcompiler])
 add_test(NAME DMMParserTests COMMAND dm_compiler_tests [dmmparser])
 add_test(NAME GotoForwardRefTests COMMAND dm_compiler_tests [gotoforward])
+add_test(NAME ExampleCompilationTests COMMAND dm_compiler_tests [examples])

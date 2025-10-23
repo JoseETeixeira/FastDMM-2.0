@@ -1,5 +1,6 @@
 #include "myg/Map.h"
 #include "myg/TileInstance.h"
+#include "myg/UndoableAction.h"
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -77,9 +78,12 @@ bool Map::PlaceObject(int x, int y, int z, const std::string& type_path) {
         return false;
     }
 
-    Location loc{x, y, z};
+    // Create a PlaceObjectAction and push it to the undo stack
+    // This will execute the action and add it to the undo stack
+    auto action = std::make_unique<PlaceObjectAction>(x, y, z, type_path);
     
-    // Get or create tile at this location
+    // Ensure tile exists before placing
+    Location loc{x, y, z};
     TileInstance* tile = GetTile(x, y, z);
     
     if (!tile) {
@@ -99,79 +103,63 @@ bool Map::PlaceObject(int x, int y, int z, const std::string& type_path) {
         tiles_[loc] = key;
     }
     
-    // Create the new object instance
-    ObjectInstance new_obj;
-    new_obj.type_path = type_path;
+    // Push the action to undo stack (this will execute it)
+    PushUndoState(std::move(action));
     
-    // Determine object type category
-    bool is_turf = type_path.find("/turf") == 0;
-    bool is_area = type_path.find("/area") == 0;
-    bool is_obj = type_path.find("/obj") == 0;
-    bool is_mob = type_path.find("/mob") == 0;
-    
-    // Handle placement based on type
-    if (is_turf) {
-        // Replace existing turf
-        bool found_turf = false;
-        for (auto& obj : tile->objects) {
-            if (obj.IsType("/turf")) {
-                obj = new_obj;
-                found_turf = true;
-                break;
-            }
-        }
-        
-        if (!found_turf) {
-            // No existing turf, add it
-            tile->objects.push_back(new_obj);
-        }
-    }
-    else if (is_area) {
-        // Replace existing area
-        bool found_area = false;
-        for (auto& obj : tile->objects) {
-            if (obj.IsType("/area")) {
-                obj = new_obj;
-                found_area = true;
-                break;
-            }
-        }
-        
-        if (!found_area) {
-            // No existing area, add it
-            tile->objects.push_back(new_obj);
-        }
-    }
-    else if (is_obj || is_mob) {
-        // Append to object list
-        tile->objects.push_back(new_obj);
-    }
-    else {
-        // Unknown type, just append
-        tile->objects.push_back(new_obj);
-    }
-    
-    // Invalidate tile cache
-    tile->cached_sorted_.clear();
-    tile->cache_valid_ = false;
-    tile->cached_area_ = nullptr;
-    
-    modified_ = true;
     return true;
 }
 
 void Map::PushUndoState(std::unique_ptr<UndoableAction> action) {
-    // TODO: Implement in task 10
+    if (!action) return;
+
+    // Execute the action (Redo)
+    action->Redo(this);
+
+    // Add to undo stack
+    undo_stack_.push_back(std::move(action));
+
+    // Clear redo stack when new action is performed
+    redo_stack_.clear();
+
+    modified_ = true;
 }
 
 bool Map::Undo() {
-    // TODO: Implement in task 10
-    return false;
+    if (undo_stack_.empty()) {
+        return false;
+    }
+
+    // Get the last action from undo stack
+    std::unique_ptr<UndoableAction> action = std::move(undo_stack_.back());
+    undo_stack_.pop_back();
+
+    // Undo the action
+    action->Undo(this);
+
+    // Move to redo stack
+    redo_stack_.push_back(std::move(action));
+
+    modified_ = true;
+    return true;
 }
 
 bool Map::Redo() {
-    // TODO: Implement in task 10
-    return false;
+    if (redo_stack_.empty()) {
+        return false;
+    }
+
+    // Get the last action from redo stack
+    std::unique_ptr<UndoableAction> action = std::move(redo_stack_.back());
+    redo_stack_.pop_back();
+
+    // Redo the action
+    action->Redo(this);
+
+    // Move to undo stack
+    undo_stack_.push_back(std::move(action));
+
+    modified_ = true;
+    return true;
 }
 
 std::string Map::AllocateKey() {

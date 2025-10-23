@@ -210,7 +210,11 @@ Token DMLexer::ParseString() {
                 case '\\': str += '\\'; break;
                 case '"': str += '"'; break;
                 case '\'': str += '\''; break;
-                default: str += escaped; break;
+                default: 
+                    // Not a recognized escape sequence, keep the backslash
+                    str += '\\';
+                    str += escaped; 
+                    break;
             }
         } else {
             str += GetCurrent();

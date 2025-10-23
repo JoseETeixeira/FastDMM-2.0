@@ -97,20 +97,23 @@ bool DMExpressionCompiler::CompileConstantPath(DMASTConstantPath* expr) {
     // The path is already a DreamPath in expr->Path.Path
     const DreamPath& dreamPath = expr->Path.Path;
     
-    // Look up type ID from object tree
-    int typeId = -1;
-    if (Compiler_ && Compiler_->GetObjectTree()->TryGetTypeId(dreamPath, typeId)) {
+    // Use GetType with context for better resolution (handles absolute, relative, and parent paths)
+    DMObject* context = (Proc_ && Proc_->OwningObject) ? Proc_->OwningObject : nullptr;
+    DMObject* typeObj = Compiler_->GetObjectTree()->GetType(dreamPath, context);
+    
+    if (typeObj != nullptr) {
         // Emit PushType opcode with the type ID
-        Writer_->EmitInt(DreamProcOpcode::PushType, typeId);
+        Writer_->EmitInt(DreamProcOpcode::PushType, typeObj->Id);
         Writer_->ResizeStack(1);  // Pushes 1 value onto stack
         return true;
     } else {
-        // Type not found - this is an error with detailed location and path
+        // Type not found - emit comprehensive error message
         if (Compiler_) {
             std::string pathStr = dreamPath.ToString();
             std::string contextMsg = "Type path '" + pathStr + "' could not be resolved";
-            if (Proc_ && Proc_->OwningObject) {
-                contextMsg += " in proc " + Proc_->OwningObject->Path.ToString() + "/" + Proc_->Name;
+            if (context) {
+                contextMsg += " in proc " + context->Path.ToString() + "/" + Proc_->Name;
+                contextMsg += " (searched from context: " + context->Path.ToString() + ")";
             }
             Compiler_->ForcedError(expr->Location_, contextMsg);
         }

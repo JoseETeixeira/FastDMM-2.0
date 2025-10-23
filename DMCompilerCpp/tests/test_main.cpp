@@ -13,6 +13,7 @@ int RunExpressionCompilerTests();
 int RunStatementCompilerTests();
 int RunDMMParserTests();
 int RunGotoForwardRefTests();
+int RunExampleCompilationTests();
 
 void PrintUsage() {
     std::cout << "Usage: dm_compiler_tests [filter]" << std::endl;
@@ -26,6 +27,7 @@ void PrintUsage() {
     std::cout << "  [bytecode]     - Run bytecode tests only" << std::endl;
     std::cout << "  [exprcompiler] - Run expression compiler tests only" << std::endl;
     std::cout << "  [dmmparser]    - Run DMM parser tests only" << std::endl;
+    std::cout << "  [examples]     - Run example compilation tests only" << std::endl;
     std::cout << "  (no args)      - Run all tests" << std::endl;
 }
 
@@ -79,6 +81,10 @@ int main(int argc, char** argv) {
     
     if (filter.empty() || filter == "[gotoforward]") {
         failures += RunGotoForwardRefTests();
+    }
+    
+    if (filter.empty() || filter == "[examples]") {
+        failures += RunExampleCompilationTests();
     }
     
     std::cout << "\n=========================" << std::endl;

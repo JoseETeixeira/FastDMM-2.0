@@ -64,6 +64,8 @@ public:
     void PushUndoState(std::unique_ptr<UndoableAction> action);
     bool Undo();
     bool Redo();
+    bool CanUndo() const { return !undo_stack_.empty(); }
+    bool CanRedo() const { return !redo_stack_.empty(); }
 
 private:
     std::string file_path_;

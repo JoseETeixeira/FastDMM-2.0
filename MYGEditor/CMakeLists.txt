@@ -87,6 +87,7 @@ set(MYG_SOURCES
     src/Renderer.cpp
     src/Camera.cpp
     src/GUIManager.cpp
+    src/UndoableAction.cpp
 )
 
 # MYG Editor executable

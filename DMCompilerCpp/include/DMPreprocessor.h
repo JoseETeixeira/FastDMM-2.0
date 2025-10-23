@@ -140,7 +140,7 @@ private:
     void PushTokens(const std::vector<Token>& tokens);
     
     // Directive handlers
-    void HandleIncludeDirective(const Token& token);
+    void HandleIncludeDirective(const Token& token, std::vector<Token>& result);
     void HandleDefineDirective(const Token& token);
     void HandleUndefineDirective(const Token& token);
     void HandleIfDirective(const Token& token);
@@ -163,6 +163,7 @@ private:
     
     // File inclusion
     bool IncludeFile(const std::string& path, const Location& includeLocation);
+    std::vector<Token> PreprocessFile(const std::string& path, const Location& includeLocation);
     std::string ResolvePath(const std::string& path, const std::string& currentFile);
     
     // Helpers

@@ -27,6 +27,7 @@ proc/copytext(T, Start = 1, End = 0) as text|null
 proc/copytext_char(T,Start=1,End=0) as text|null
 proc/cos(X) as num
 proc/CRASH(msg) as null
+proc/del(Object)
 proc/fcopy(Src, Dst) as num
 proc/fcopy_rsc(File) as num|null
 proc/fdel(File) as num
@@ -63,6 +64,7 @@ proc/icon(icon, icon_state, dir, frame, moving)
 proc/icon_states(Icon, mode = 0) as /list
 proc/image(icon, loc, icon_state, layer, dir, pixel_x, pixel_y)
 proc/initial(Var)
+proc/input(Usr = usr, Message, Title, Default, Type)
 proc/isarea(...) as num
 proc/isfile(File) as num
 proc/isicon(Icon) as num
@@ -83,9 +85,11 @@ proc/isturf(...) as num
 proc/istype(Val, Type) as num
 proc/json_decode(JSON)
 proc/json_encode(Value, flags)
+proc/length(E) as num
 proc/length_char(E) as num
 proc/lerp(A, B, factor)
 proc/link(url)
+proc/locate(Type, Container)
 proc/list2params(List) as text
 proc/load_ext(LibName, FuncName)
 proc/load_resource(...)
@@ -132,6 +136,7 @@ proc/sign(A) as num
 proc/sin(X) as num
 proc/sleep(Delay)
 proc/sorttext(...) as num
+proc/spawn(Delay)
 proc/sorttextEx(...) as num
 proc/sound(file, repeat = 0, wait, channel, volume)
 proc/spantext(Haystack,Needles,Start=1) as num

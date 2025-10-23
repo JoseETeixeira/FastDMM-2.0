@@ -273,9 +273,9 @@
     - Update viewport if visual properties changed (icon, icon_state, dir, etc.)
     - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5_
 
-- [ ] 10. Implement undo/redo system
+- [x] 10. Implement undo/redo system
 
-  - [ ] 10.1 Create UndoableAction base class and concrete actions
+  - [x] 10.1 Create UndoableAction base class and concrete actions
 
     - Define UndoableAction interface with Undo() and Redo() methods
     - Implement PlaceObjectAction for object placement
@@ -284,7 +284,7 @@
     - Store necessary state to reverse each action
     - _Requirements: 10.1_
 
-  - [ ] 10.2 Implement undo/redo stacks in Map class
+  - [x] 10.2 Implement undo/redo stacks in Map class
 
     - Add undo*stack* and redo*stack* vectors to Map
     - Implement PushUndoState() to add action to undo stack
@@ -294,7 +294,7 @@
     - Call Undo()/Redo() methods on actions
     - _Requirements: 10.2, 10.3, 10.5_
 
-  - [ ] 10.3 Wire undo/redo to input and menu
+  - [x] 10.3 Wire undo/redo to input and menu
     - Handle Ctrl+Z keyboard shortcut to call Map::Undo()
     - Handle Ctrl+Y keyboard shortcut to call Map::Redo()
     - Add Edit > Undo and Edit > Redo menu items
