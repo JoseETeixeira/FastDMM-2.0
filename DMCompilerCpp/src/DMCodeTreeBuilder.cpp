@@ -1,0 +1,121 @@
+#include "DMCodeTreeBuilder.h"
+#include "DMCompiler.h"
+#include "DMAST.h"
+#include "DMASTStatement.h"
+#include "DMObjectTree.h"
+#include "DMObject.h"
+#include "DMProc.h"
+#include "DMVariable.h"
+#include "DMASTExpression.h"
+#include <iostream>
+
+namespace DMCompiler {
+
+DMCodeTreeBuilder::DMCodeTreeBuilder(DMCompiler* compiler)
+    : Compiler_(compiler)
+    , ObjectTree_(compiler->GetObjectTree())
+    , LeftDMStandard_(false)
+{
+}
+
+DMCodeTreeBuilder::~DMCodeTreeBuilder() = default;
+
+void DMCodeTreeBuilder::BuildCodeTree(DMASTFile* astFile) {
+    if (!astFile) {
+        Compiler_->ForcedError(Location::Internal, "No AST file provided to code tree builder");
+        return;
+    }
+
+    LeftDMStandard_ = false;
+
+    if (Compiler_->GetSettings().Verbose) {
+        std::cout << "  Building code tree from " << astFile->Statements.size() << " statements..." << std::endl;
+    }
+
+    // Add everything in the AST to the object tree
+    ProcessStatements(astFile->Statements, DreamPath::Root);
+
+    // Create each type's initialization proc (initializes vars that aren't constants)
+    if (Compiler_->GetSettings().Verbose) {
+        std::cout << "  Creating initialization procs..." << std::endl;
+    }
+    
+    for (auto* dmObject : ObjectTree_->GetAllObjects()) {
+        dmObject->CreateInitializationProc(Compiler_, ObjectTree_);
+    }
+
+    // Compile every proc
+    if (Compiler_->GetSettings().Verbose) {
+        std::cout << "  Compiling procs..." << std::endl;
+    }
+    
+    for (auto* proc : ObjectTree_->GetAllProcs()) {
+        proc->Compile(Compiler_);
+    }
+}
+
+void DMCodeTreeBuilder::ProcessStatements(const std::vector<std::unique_ptr<DMASTStatement>>& statements, const DreamPath& currentType) {
+    for (const auto& statement : statements) {
+        ProcessStatement(statement.get(), currentType);
+    }
+}
+
+void DMCodeTreeBuilder::ProcessStatement(DMASTStatement* statement, const DreamPath& currentType) {
+    if (!statement) return;
+
+    // Track when we leave DMStandard
+    if (!LeftDMStandard_ && !statement->Location_.InDMStandard) {
+        LeftDMStandard_ = true;
+        // TODO: Implement DMStandard finalization
+    }
+
+    // Object definition: /mob/player { ... }
+    if (auto* objectDef = dynamic_cast<DMASTObjectDefinition*>(statement)) {
+        DreamPath typePath = objectDef->Path.Path;
+        
+        // Add the type to the object tree
+        ObjectTree_->AddType(typePath);
+        
+        // Process inner statements - convert vector<unique_ptr<DMASTObjectStatement>> to vector<unique_ptr<DMASTStatement>>
+        std::vector<std::unique_ptr<DMASTStatement>> innerStatements;
+        for (const auto& innerStmt : objectDef->InnerStatements) {
+            // We can't move from the const vector, so we'll just process them directly
+        }
+        
+        // Process inner statements directly without conversion
+        for (const auto& innerStmt : objectDef->InnerStatements) {
+            ProcessStatement(innerStmt.get(), typePath);
+        }
+    }
+    // Variable definition: var/name = value
+    else if (auto* varDef = dynamic_cast<DMASTObjectVarDefinition*>(statement)) {
+        // Add the variable to the current type
+        // The variable's name is stored in varDef->Name
+        // The variable's type constraint (if any) is in varDef->TypePath
+        ObjectTree_->AddType(currentType);
+        ObjectTree_->AddObjectVar(currentType, varDef);
+    }
+    // Variable override: existing_var = new_value
+    else if (auto* varOverride = dynamic_cast<DMASTObjectVarOverride*>(statement)) {
+        // Variable overrides apply to the current type
+        ObjectTree_->AddType(currentType);
+        ObjectTree_->AddObjectVarOverride(currentType, varOverride);
+    }
+    // Proc definition: proc/test() { ... }
+    else if (auto* procDef = dynamic_cast<DMASTObjectProcDefinition*>(statement)) {
+        DreamPath procOwner = currentType.Combine(procDef->ObjectPath);
+        
+        // Add the type that owns this proc
+        ObjectTree_->AddType(procOwner);
+        
+        // Add the proc to the object tree
+        ObjectTree_->AddProc(procOwner, procDef);
+    }
+    // Other statement types are ignored (proc-level statements shouldn't be here)
+    else {
+        // This could be a proc-level statement at the wrong level
+        // Just skip it - errors should have been reported during parsing
+    }
+}
+
+} // namespace DMCompiler
