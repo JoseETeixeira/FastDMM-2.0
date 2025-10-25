@@ -621,15 +621,11 @@ std::unique_ptr<DMASTExpression> DMParser::PostfixExpression() {
         }
         // Post-increment: x++
         else if (Current().Type == TokenType::Increment) {
-            std::cout << "DEBUG PostfixExpression: found post-increment at column " << CurrentLocation().Column << std::endl;
-            std::cout << "DEBUG PostfixExpression: current expr type = " << typeid(*expr).name() << std::endl;
             Advance();
-            std::cout << "DEBUG PostfixExpression: after advance, current token type = " << static_cast<int>(Current().Type) << " (Increment=" << static_cast<int>(TokenType::Increment) << ")" << std::endl;
             expr = std::make_unique<DMASTExpressionUnary>(loc, UnaryOperator::PostIncrement, std::move(expr));
         }
         // Post-decrement: x--
         else if (Current().Type == TokenType::Decrement) {
-            std::cout << "DEBUG PostfixExpression: found post-decrement" << std::endl;
             Advance();
             expr = std::make_unique<DMASTExpressionUnary>(loc, UnaryOperator::PostDecrement, std::move(expr));
         }
@@ -1354,12 +1350,43 @@ std::unique_ptr<DMASTProcStatement> DMParser::ProcStatementFor() {
     
     // Parse first expression - could be:
     // 1. for(var in list) - for-in loop
-    // 2. for(x in list) - for-in loop with existing variable
-    // 3. for(x = 0; ...) - traditional C-style for loop
+    // 2. for(var/mob/M in list) - for-in loop with typed variable
+    // 3. for(x in list) - for-in loop with existing variable
+    // 4. for(x = 0; ...) - traditional C-style for loop
     
+    // Special handling: if we see 'var' followed by '/', we need to parse it as a path
+    // expression for for-in loops (e.g., var/mob/M)
     std::unique_ptr<DMASTExpression> firstExpr;
     if (Current().Type != TokenType::Semicolon) {
-        firstExpr = Expression();
+        // Check if this looks like a for-in loop variable declaration
+        if (Current().Type == TokenType::Var) {
+            // Consume 'var' keyword
+            Location varLoc = CurrentLocation();
+            Advance();
+            
+            // Now parse the path (e.g., /mob/M or mob/M or just M)
+            // The path should start with / or an identifier
+            firstExpr = PathExpression();
+        } else {
+            // Parse as normal expression
+            firstExpr = Expression();
+        }
+    }
+    
+    // Check for optional 'as' keyword (type filter) before 'in'
+    // This handles: for(var/mob/M as /mob|mob in world)
+    std::string typeFilterStr;
+    if (Current().Type == TokenType::As) {
+        Advance(); // Consume 'as'
+        
+        // Parse type filter expression - read tokens until we hit 'in'
+        // Type filter can be like /mob or /mob|mob
+        while (Current().Type != TokenType::In && 
+               Current().Type != TokenType::RightParenthesis && 
+               Current().Type != TokenType::EndOfFile) {
+            typeFilterStr += Current().Text;
+            Advance();
+        }
     }
     
     // Check if this is a for-in loop by looking for "in" keyword
@@ -1373,6 +1400,39 @@ std::unique_ptr<DMASTProcStatement> DMParser::ProcStatementFor() {
             return nullptr;
         }
         
+        // Extract variable declaration information from firstExpr
+        DMASTProcStatementForIn::VariableDeclaration varDecl;
+        
+        // Check if firstExpr is a path expression (var/mob/M or /mob/M)
+        if (auto* pathExpr = dynamic_cast<DMASTConstantPath*>(firstExpr.get())) {
+            const DMASTPath& path = pathExpr->Path;
+            const std::vector<std::string>& elements = path.Path.GetElements();
+            
+            if (!elements.empty()) {
+                // Last element is the variable name
+                varDecl.Name = elements.back();
+                varDecl.Loc = pathExpr->Location_;
+                
+                // If there are more elements, they form the type path
+                if (elements.size() > 1) {
+                    // Build type path from all but the last element
+                    std::vector<std::string> typeElements(elements.begin(), elements.end() - 1);
+                    DreamPath typePath(path.Path.GetPathType(), typeElements);
+                    varDecl.TypePath = typePath;
+                }
+            }
+        }
+        // Check if firstExpr is just an identifier (simple variable)
+        else if (auto* identExpr = dynamic_cast<DMASTIdentifier*>(firstExpr.get())) {
+            varDecl.Name = identExpr->Identifier;
+            varDecl.Loc = identExpr->Location_;
+        }
+        
+        // Use the type filter that was parsed earlier (before 'in')
+        if (!typeFilterStr.empty()) {
+            varDecl.TypeFilter = typeFilterStr;
+        }
+        
         Consume(TokenType::RightParenthesis, "Expected ')' after for-in list");
         
         // Consume whitespace and newlines before body (for indentation-based syntax)
@@ -1382,9 +1442,9 @@ std::unique_ptr<DMASTProcStatement> DMParser::ProcStatementFor() {
         // Body
         auto body = ProcBlockInner();
         
-        // Create a for-in statement
+        // Create a for-in statement with enhanced variable information
         return std::make_unique<DMASTProcStatementForIn>(loc, std::move(firstExpr), 
-                                                         std::move(listExpr), std::move(body));
+                                                         varDecl, std::move(listExpr), std::move(body));
     }
     
     // Not a for-in loop, continue parsing as traditional for loop
@@ -1742,15 +1802,14 @@ std::unique_ptr<DMASTStatement> DMParser::Statement() {
         return ObjectProcDefinition(true);
     }
     
-    // Check for var definition
-    if (Current().Type == TokenType::Var) {
-        return ObjectVarDefinition();
-    }
-    
-    // Try to parse a path (could be /obj, /obj/item, New, test, etc.)
-    if (Current().Type == TokenType::Divide || IsInSet(Current().Type, IdentifierTypes_)) {
+    // Try to parse a path (could be /obj, /obj/item, New, test, var, etc.)
+    // Note: "var" is now handled as a path element, not a special keyword here
+    if (Current().Type == TokenType::Divide || 
+        IsInSet(Current().Type, IdentifierTypes_) ||
+        Current().Type == TokenType::Var) {
         // Save position in case we need to backtrack
         auto path = ParsePath();
+        
         
         Whitespace();
         
@@ -1945,26 +2004,44 @@ std::unique_ptr<DMASTObjectStatement> DMParser::ObjectStatement() {
     Location loc = CurrentLocation();
     Whitespace();
     
-    // Check for explicit proc/verb
+    // Check for explicit proc/verb (but only if followed by /)
+    // This handles "proc/name()" and "verb/name()" syntax
     if (Current().Type == TokenType::Proc) {
-        return ObjectProcDefinition(false);
+        // Look ahead to see if it's "proc/" or just "proc" (which could be an object path)
+        Token savedToken = Current();
+        Advance();
+        Whitespace();
+        if (Current().Type == TokenType::Divide) {
+            // It's "proc/", so parse as proc definition
+            ReuseToken(savedToken);
+            return ObjectProcDefinition(false);
+        }
+        // It's just "proc", treat as object path
+        ReuseToken(savedToken);
     }
     if (Current().Type == TokenType::Verb) {
-        return ObjectProcDefinition(true);
+        // Look ahead to see if it's "verb/" or just "verb" (which could be an object path)
+        Token savedToken = Current();
+        Advance();
+        Whitespace();
+        if (Current().Type == TokenType::Divide) {
+            // It's "verb/", so parse as verb definition
+            ReuseToken(savedToken);
+            return ObjectProcDefinition(true);
+        }
+        // It's just "verb", treat as object path
+        ReuseToken(savedToken);
     }
     
-    // Check for var
-    if (Current().Type == TokenType::Var) {
-        return ObjectVarDefinition();
-    }
-    
-    // For identifiers, we need to look ahead to determine the type
+    // For identifiers and keywords (including var), we need to look ahead to determine the type
     // Could be:
     //   identifier()     -> proc definition (implicit proc)
-    //   identifier = val -> var override
+    //   identifier = val -> var override OR var definition (if in var block)
     //   identifier { ... -> object definition
     //   identifier\n...  -> object definition
-    if (IsInSet(Current().Type, IdentifierTypes_)) {
+    if (IsInSet(Current().Type, IdentifierTypes_) || 
+        Current().Type == TokenType::Var ||
+        Current().Type == TokenType::Global) {
         // Save current token to backtrack if needed
         Token savedToken = Current();
         
@@ -1981,23 +2058,118 @@ std::unique_ptr<DMASTObjectStatement> DMParser::ObjectStatement() {
             return ObjectProcDefinition(false);
         }
         
-        // Check for = -> it's a var override
+        // Check if we're in a var block context (CurrentPath_ contains "var")
+        bool inVarBlock = false;
+        for (const auto& elem : CurrentPath_.GetElements()) {
+            if (elem == "var") {
+                inVarBlock = true;
+                break;
+            }
+        }
+        
+        // Check for = -> could be var override or var definition
         if (Current().Type == TokenType::Assign) {
-            // Continue with var override (path already parsed)
-            std::string varName = path.Path.GetElements().empty() ? "" : path.Path.GetLastElement();
-            Advance(); // consume =
+            // If in var block, treat as variable definition
+            if (inVarBlock) {
+                // Parse as variable definition
+                // For "Beam/myBeam = value", path is "Beam/myBeam"
+                // Variable name is the last element: "myBeam"
+                // Variable type is everything before the last element: "Beam"
+                auto pathElements = path.Path.GetElements();
+                std::string varName = pathElements.empty() ? "" : pathElements.back();
+                
+                // Extract type path (all elements except the last one)
+                std::vector<std::string> typeElements;
+                if (pathElements.size() > 1) {
+                    typeElements.assign(pathElements.begin(), pathElements.end() - 1);
+                }
+                
+                // Create type path (preserve absolute/relative from original path)
+                DreamPath typePath(path.Path.GetPathType(), typeElements);
+                DMASTPath typeASTPath(loc, typePath, false);
+                
+                Advance(); // consume =
+                Whitespace();
+                auto value = Expression();
+                
+                return std::make_unique<DMASTObjectVarDefinition>(loc, varName, typeASTPath, std::move(value), std::nullopt);
+            } else {
+                // Parse as variable override
+                std::string varName = path.Path.GetElements().empty() ? "" : path.Path.GetLastElement();
+                Advance(); // consume =
+                Whitespace();
+                auto value = Expression();
+                return std::make_unique<DMASTObjectVarOverride>(loc, varName, std::move(value));
+            }
+        }
+        
+        // Check for [ -> array syntax (e.g., techs[0])
+        // In a var block, this is a variable definition with array initialization
+        if (Current().Type == TokenType::LeftBracket && inVarBlock) {
+            // Parse array size
+            Advance(); // consume [
             Whitespace();
-            auto value = Expression();
-            return std::make_unique<DMASTObjectVarOverride>(loc, varName, std::move(value));
+            auto arraySize = Expression();
+            Whitespace();
+            Consume(TokenType::RightBracket, "Expected ']' after array size");
+            
+            // For "techs[0]", path is "techs"
+            // Variable name is "techs"
+            // Variable type is empty (will be treated as /list)
+            auto pathElements = path.Path.GetElements();
+            std::string varName = pathElements.empty() ? "" : pathElements.back();
+            
+            // Extract type path (all elements except the last one)
+            std::vector<std::string> typeElements;
+            if (pathElements.size() > 1) {
+                typeElements.assign(pathElements.begin(), pathElements.end() - 1);
+            }
+            
+            // Create type path (preserve absolute/relative from original path)
+            DreamPath typePath(path.Path.GetPathType(), typeElements);
+            DMASTPath typeASTPath(loc, typePath, false);
+            
+            // For now, treat array syntax as uninitialized (null value)
+            // The array size is just a hint, not an initialization value
+            // TODO: In the future, we could create a proper list initialization with the size
+            
+            return std::make_unique<DMASTObjectVarDefinition>(loc, varName, typeASTPath, nullptr, std::nullopt);
+        }
+        
+        // Check for newline/semicolon -> variable definition without initialization (in var block)
+        if ((Current().Type == TokenType::Newline || 
+             Current().Type == TokenType::Semicolon ||
+             Current().Type == TokenType::EndOfFile) && inVarBlock) {
+            // Variable definition without initialization
+            // For "Beam/myBeam", path is "Beam/myBeam"
+            // Variable name is the last element: "myBeam"
+            // Variable type is everything before the last element: "Beam"
+            auto pathElements = path.Path.GetElements();
+            std::string varName = pathElements.empty() ? "" : pathElements.back();
+            
+            // Extract type path (all elements except the last one)
+            std::vector<std::string> typeElements;
+            if (pathElements.size() > 1) {
+                typeElements.assign(pathElements.begin(), pathElements.end() - 1);
+            }
+            
+            // Create type path (preserve absolute/relative from original path)
+            DreamPath typePath(path.Path.GetPathType(), typeElements);
+            DMASTPath typeASTPath(loc, typePath, false);
+            
+            return std::make_unique<DMASTObjectVarDefinition>(loc, varName, typeASTPath, nullptr, std::nullopt);
         }
         
         // Otherwise, backtrack and parse as object definition
         ReuseToken(savedToken);
     }
     
-    // Try to parse as object definition/var override
+    // Try to parse as object definition
     // ObjectDefinition will handle the rest
-    if (Current().Type == TokenType::Divide || IsInSet(Current().Type, IdentifierTypes_)) {
+    if (Current().Type == TokenType::Divide || 
+        IsInSet(Current().Type, IdentifierTypes_) ||
+        Current().Type == TokenType::Var ||
+        Current().Type == TokenType::Global) {
         auto def = ObjectDefinition();
         return std::unique_ptr<DMASTObjectStatement>(static_cast<DMASTObjectStatement*>(def.release()));
     }
@@ -2022,8 +2194,12 @@ DMASTPath DMParser::ParsePath() {
         Whitespace();
     }
     
-    // Parse path elements (identifiers and certain keywords like 'global')
-    while (IsInSet(Current().Type, IdentifierTypes_) || Current().Type == TokenType::Global) {
+    // Parse path elements (identifiers and certain keywords like 'global', 'var', 'proc', 'verb')
+    while (IsInSet(Current().Type, IdentifierTypes_) || 
+           Current().Type == TokenType::Global ||
+           Current().Type == TokenType::Var ||
+           Current().Type == TokenType::Proc ||
+           Current().Type == TokenType::Verb) {
         elements.push_back(Current().Text);
         Advance();
         
@@ -2278,52 +2454,15 @@ std::unique_ptr<DMASTDefinitionParameter> DMParser::ProcParameter() {
                                                       std::move(defaultValue), nullptr, explicitValueType);
 }
 
+// ObjectVarDefinition is no longer used - var blocks are now handled through the object definition path
+// This function is kept for backwards compatibility but should not be called
 std::unique_ptr<DMASTObjectStatement> DMParser::ObjectVarDefinition() {
     Location loc = CurrentLocation();
     Consume(TokenType::Var, "Expected 'var'");
     
-    // Parse var path
-    auto path = ParsePath();
-    std::string varName = path.Path.GetElements().empty() ? "" : path.Path.GetLastElement();
-    
-    // Check for 'as' type specification
-    std::optional<DMComplexValueType> explicitValueType;
-    if (Current().Type == TokenType::As) {
-        Advance();
-        
-        // Parse type flags (e.g., "num", "text", "num|text")
-        std::string typeStr;
-        
-        // Collect type tokens until we hit a delimiter
-        while (Current().Type != TokenType::Assign &&
-               Current().Type != TokenType::Semicolon &&
-               Current().Type != TokenType::Newline &&
-               Current().Type != TokenType::EndOfFile) {
-            
-            if (Current().Type == TokenType::BitwiseOr) {
-                typeStr += "|";
-                Advance();
-            } else if (IsInSet(Current().Type, IdentifierTypes_)) {
-                typeStr += Current().Text;
-                Advance();
-            } else {
-                break;
-            }
-        }
-        
-        // Convert type string to DMValueType flags
-        DMValueType flags = ParseTypeFlags(typeStr);
-        explicitValueType = DMComplexValueType(flags);
-    }
-    
-    // Check for initialization
-    std::unique_ptr<DMASTExpression> value;
-    if (Current().Type == TokenType::Assign) {
-        Advance();
-        value = Expression();
-    }
-    
-    return std::make_unique<DMASTObjectVarDefinition>(loc, varName, path, std::move(value), explicitValueType);
+    // This should not be reached anymore since var is now handled as part of object paths
+    Emit(WarningCode::BadToken, "Unexpected var keyword - this should be handled as an object path");
+    return nullptr;
 }
 
 std::unique_ptr<DMASTObjectStatement> DMParser::ObjectDefinition() {
@@ -2415,6 +2554,10 @@ std::vector<std::unique_ptr<DMASTObjectStatement>> DMParser::ParseIndentedObject
             break;
         }
         
+        // Save the current position's indentation - this is the expected indentation
+        // for statements at this nesting level
+        int expectedIndent = currentIndent;
+        
         // Parse the statement
         auto stmt = ObjectStatement();
         if (stmt) {
@@ -2433,6 +2576,12 @@ std::vector<std::unique_ptr<DMASTObjectStatement>> DMParser::ParseIndentedObject
         while (Current().Type == TokenType::Semicolon || Current().Type == TokenType::Newline) {
             Advance();
         }
+        
+        // After parsing a statement (which might have consumed deeply nested content),
+        // we need to continue parsing more statements at the same level.
+        // Don't break just because the current position has lower indentation -
+        // skip lines with lower indentation until we find another statement at our level
+        // or determine that the block has truly ended.
     }
     
     return statements;

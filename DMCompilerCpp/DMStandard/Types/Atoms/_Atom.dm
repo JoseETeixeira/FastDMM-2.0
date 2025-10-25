@@ -1,4 +1,5 @@
-﻿/atom
+// atom type definition
+/atom
 	parent_type = /datum
 
 	var/name = null
@@ -107,3 +108,4 @@
 	
 	New(loc)
 		..()
+

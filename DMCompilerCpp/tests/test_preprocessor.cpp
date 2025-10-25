@@ -141,6 +141,63 @@ int RunPreprocessorTests() {
         }
     }
     
-    std::cout << "\n  Preprocessor tests: " << (5 - failures) << "/5 passed" << std::endl;
+    // Test 6: Streaming interface (Initialize, GetNextToken, IsComplete)
+    {
+        std::cout << "  Test 6: Streaming interface (Initialize, GetNextToken, IsComplete)... ";
+        try {
+            // Create a simple test file
+            std::string testFilePath = "test_files/streaming_test.dm";
+            fs::create_directories("test_files");
+            std::ofstream testFile(testFilePath);
+            if (testFile.is_open()) {
+                testFile << "var/x = 1\n";
+                testFile << "var/y = 2\n";
+                testFile.close();
+                
+                DMPreprocessor preprocessor;
+                
+                // Test Initialize
+                if (!preprocessor.Initialize(testFilePath)) {
+                    std::cout << "FAILED (Initialize returned false)" << std::endl;
+                    failures++;
+                } else {
+                    // Test GetNextToken and IsComplete
+                    int tokenCount = 0;
+                    while (!preprocessor.IsComplete()) {
+                        Token token = preprocessor.GetNextToken();
+                        if (token.Type == TokenType::EndOfFile) {
+                            break;
+                        }
+                        tokenCount++;
+                        
+                        // Safety check to prevent infinite loop
+                        if (tokenCount > 1000) {
+                            std::cout << "FAILED (Too many tokens, possible infinite loop)" << std::endl;
+                            failures++;
+                            break;
+                        }
+                    }
+                    
+                    if (tokenCount > 0 && tokenCount < 1000) {
+                        std::cout << "PASSED (" << tokenCount << " tokens)" << std::endl;
+                    } else if (tokenCount == 0) {
+                        std::cout << "FAILED (No tokens produced)" << std::endl;
+                        failures++;
+                    }
+                }
+                
+                // Clean up
+                fs::remove(testFilePath);
+            } else {
+                std::cout << "FAILED (Could not create test file)" << std::endl;
+                failures++;
+            }
+        } catch (const std::exception& e) {
+            std::cout << "FAILED (exception: " << e.what() << ")" << std::endl;
+            failures++;
+        }
+    }
+    
+    std::cout << "\n  Preprocessor tests: " << (6 - failures) << "/6 passed" << std::endl;
     return failures;
 }

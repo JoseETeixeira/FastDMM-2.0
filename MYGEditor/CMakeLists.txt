@@ -79,6 +79,7 @@ set(MYG_SOURCES
     src/InputHandler.cpp
     src/ProjectManager.cpp
     src/ObjectTreeCache.cpp
+    src/ObjectTreeManager.cpp
     src/DMI.cpp
     src/DMICache.cpp
     src/Map.cpp

@@ -1,4 +1,5 @@
-﻿/pixloc
+// pixloc type definition
+/pixloc
 	var/turf/loc as opendream_unimplemented
 	var/step_x as opendream_unimplemented
 	var/step_y as opendream_unimplemented

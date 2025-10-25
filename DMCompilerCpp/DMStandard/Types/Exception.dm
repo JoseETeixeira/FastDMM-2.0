@@ -1,3 +1,4 @@
+// exception type definition
 /exception
 	parent_type = /datum
 
@@ -10,4 +11,5 @@
 	name = N
 	file = F
 	line = L
+
 

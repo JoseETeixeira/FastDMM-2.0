@@ -1,4 +1,5 @@
-﻿/mutable_appearance
+// mutable_appearance type definition
+/mutable_appearance
 	parent_type = /image
 
 	var/animate_movement = 1 as opendream_unimplemented

@@ -1,4 +1,4 @@
-﻿// Keep this in line with AList.dm
+// Keep this in line with AList.dm
 
 /list
 	var/len

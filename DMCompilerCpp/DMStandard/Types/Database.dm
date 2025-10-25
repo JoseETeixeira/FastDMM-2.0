@@ -1,3 +1,4 @@
+// database type definition
 /database
 	parent_type = /datum
 	proc/Close()
@@ -23,3 +24,4 @@
 
 	proc/Reset()
 		set opendream_unimplemented = TRUE
+

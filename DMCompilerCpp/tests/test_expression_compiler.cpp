@@ -2409,6 +2409,277 @@ bool TestCompileLogicalOrAssign() {
     return true;
 }
 
+// Test field dereference assignment: obj.field = value
+bool TestCompileFieldDereferenceAssignment() {
+    std::cout << "  TestCompileFieldDereferenceAssignment... ";
+    
+    DMCompiler::BytecodeWriter writer;
+    DMCompiler::DMCompiler compiler;
+    DMCompiler::DMObject testObj(0, DMCompiler::DreamPath("/test"));
+    DMCompiler::DMProc proc(0, "test_proc", &testObj, false, DMCompiler::Location());
+    
+    // Add local variable 'obj'
+    proc.AddLocalVariable("obj");
+    
+    DMCompiler::DMExpressionCompiler exprCompiler(&compiler, &proc, &writer);
+    
+    // Create AST: obj.health = 100
+    // LValue: obj.health (DMASTDereference)
+    auto objIdent = std::make_unique<DMCompiler::DMASTIdentifier>(DMCompiler::Location(), "obj");
+    auto fieldIdent = std::make_unique<DMCompiler::DMASTIdentifier>(DMCompiler::Location(), "health");
+    auto lvalue = std::make_unique<DMCompiler::DMASTDereference>(
+        DMCompiler::Location(),
+        std::move(objIdent),
+        DMCompiler::DereferenceType::Direct,
+        std::move(fieldIdent)
+    );
+    
+    // RValue: 100
+    auto rvalue = std::make_unique<DMCompiler::DMASTConstantInteger>(DMCompiler::Location(), 100);
+    
+    auto expr = std::make_unique<DMCompiler::DMASTAssign>(
+        DMCompiler::Location(),
+        std::move(lvalue),
+        DMCompiler::AssignmentOperator::Assign,
+        std::move(rvalue)
+    );
+    
+    // Compile
+    bool success = exprCompiler.CompileExpression(expr.get());
+    assert(success && "Should successfully compile field dereference assignment");
+    
+    const auto& bytecode = writer.GetBytecode();
+    
+    // Should have:
+    // 1. PushFloat 100 (for the value)
+    // 2. PushReferenceValue for 'obj' (local variable)
+    // 3. Assign opcode with Field reference (type 12)
+    
+    bool foundPushFloat = false;
+    bool foundAssign = false;
+    
+    for (size_t i = 0; i < bytecode.size(); i++) {
+        if (bytecode[i] == static_cast<uint8_t>(DMCompiler::DreamProcOpcode::PushFloat)) {
+            foundPushFloat = true;
+        }
+        if (bytecode[i] == static_cast<uint8_t>(DMCompiler::DreamProcOpcode::Assign)) {
+            foundAssign = true;
+            // Check that the reference type is Field (12)
+            if (i + 1 < bytecode.size()) {
+                assert(bytecode[i + 1] == 12 && "Reference type should be Field (12)");
+            }
+        }
+    }
+    
+    assert(foundPushFloat && "Should emit PushFloat for value");
+    assert(foundAssign && "Should emit Assign opcode");
+    
+    std::cout << "PASSED" << std::endl;
+    return true;
+}
+
+// Test chained field dereference assignment: a.b.c = value
+bool TestCompileChainedFieldDereferenceAssignment() {
+    std::cout << "  TestCompileChainedFieldDereferenceAssignment... ";
+    
+    DMCompiler::BytecodeWriter writer;
+    DMCompiler::DMCompiler compiler;
+    DMCompiler::DMObject testObj(0, DMCompiler::DreamPath("/test"));
+    DMCompiler::DMProc proc(0, "test_proc", &testObj, false, DMCompiler::Location());
+    
+    // Add local variable 'a'
+    proc.AddLocalVariable("a");
+    
+    DMCompiler::DMExpressionCompiler exprCompiler(&compiler, &proc, &writer);
+    
+    // Create AST: a.b.c = null
+    // LValue: a.b.c (nested DMASTDereference)
+    auto aIdent = std::make_unique<DMCompiler::DMASTIdentifier>(DMCompiler::Location(), "a");
+    auto bIdent = std::make_unique<DMCompiler::DMASTIdentifier>(DMCompiler::Location(), "b");
+    auto abDeref = std::make_unique<DMCompiler::DMASTDereference>(
+        DMCompiler::Location(),
+        std::move(aIdent),
+        DMCompiler::DereferenceType::Direct,
+        std::move(bIdent)
+    );
+    
+    auto cIdent = std::make_unique<DMCompiler::DMASTIdentifier>(DMCompiler::Location(), "c");
+    auto lvalue = std::make_unique<DMCompiler::DMASTDereference>(
+        DMCompiler::Location(),
+        std::move(abDeref),
+        DMCompiler::DereferenceType::Direct,
+        std::move(cIdent)
+    );
+    
+    // RValue: null
+    auto rvalue = std::make_unique<DMCompiler::DMASTConstantNull>(DMCompiler::Location());
+    
+    auto expr = std::make_unique<DMCompiler::DMASTAssign>(
+        DMCompiler::Location(),
+        std::move(lvalue),
+        DMCompiler::AssignmentOperator::Assign,
+        std::move(rvalue)
+    );
+    
+    // Compile
+    bool success = exprCompiler.CompileExpression(expr.get());
+    assert(success && "Should successfully compile chained field dereference assignment");
+    
+    const auto& bytecode = writer.GetBytecode();
+    
+    // Should have:
+    // 1. PushNull (for the value)
+    // 2. PushReferenceValue for 'a' (local variable)
+    // 3. DereferenceField for 'b' (to get a.b)
+    // 4. Assign opcode with Field reference (type 12) for 'c'
+    
+    bool foundPushNull = false;
+    bool foundDereferenceField = false;
+    bool foundAssign = false;
+    
+    for (size_t i = 0; i < bytecode.size(); i++) {
+        if (bytecode[i] == static_cast<uint8_t>(DMCompiler::DreamProcOpcode::PushNull)) {
+            foundPushNull = true;
+        }
+        if (bytecode[i] == static_cast<uint8_t>(DMCompiler::DreamProcOpcode::DereferenceField)) {
+            foundDereferenceField = true;
+        }
+        if (bytecode[i] == static_cast<uint8_t>(DMCompiler::DreamProcOpcode::Assign)) {
+            foundAssign = true;
+        }
+    }
+    
+    assert(foundPushNull && "Should emit PushNull for value");
+    assert(foundDereferenceField && "Should emit DereferenceField for intermediate access");
+    assert(foundAssign && "Should emit Assign opcode");
+    
+    std::cout << "PASSED" << std::endl;
+    return true;
+}
+
+// Test compound assignment to field: obj.count += 1
+bool TestCompileFieldDereferenceCompoundAssignment() {
+    std::cout << "  TestCompileFieldDereferenceCompoundAssignment... ";
+    
+    DMCompiler::BytecodeWriter writer;
+    DMCompiler::DMCompiler compiler;
+    DMCompiler::DMObject testObj(0, DMCompiler::DreamPath("/test"));
+    DMCompiler::DMProc proc(0, "test_proc", &testObj, false, DMCompiler::Location());
+    
+    // Add local variable 'obj'
+    proc.AddLocalVariable("obj");
+    
+    DMCompiler::DMExpressionCompiler exprCompiler(&compiler, &proc, &writer);
+    
+    // Create AST: obj.count += 1
+    auto objIdent = std::make_unique<DMCompiler::DMASTIdentifier>(DMCompiler::Location(), "obj");
+    auto fieldIdent = std::make_unique<DMCompiler::DMASTIdentifier>(DMCompiler::Location(), "count");
+    auto lvalue = std::make_unique<DMCompiler::DMASTDereference>(
+        DMCompiler::Location(),
+        std::move(objIdent),
+        DMCompiler::DereferenceType::Direct,
+        std::move(fieldIdent)
+    );
+    
+    auto rvalue = std::make_unique<DMCompiler::DMASTConstantInteger>(DMCompiler::Location(), 1);
+    
+    auto expr = std::make_unique<DMCompiler::DMASTAssign>(
+        DMCompiler::Location(),
+        std::move(lvalue),
+        DMCompiler::AssignmentOperator::AddAssign,
+        std::move(rvalue)
+    );
+    
+    // Compile
+    bool success = exprCompiler.CompileExpression(expr.get());
+    assert(success && "Should successfully compile field dereference compound assignment");
+    
+    const auto& bytecode = writer.GetBytecode();
+    
+    // Should have Append opcode (for +=)
+    bool foundAppend = false;
+    for (size_t i = 0; i < bytecode.size(); i++) {
+        if (bytecode[i] == static_cast<uint8_t>(DMCompiler::DreamProcOpcode::Append)) {
+            foundAppend = true;
+            break;
+        }
+    }
+    
+    assert(foundAppend && "Should emit Append opcode for +=");
+    
+    std::cout << "PASSED" << std::endl;
+    return true;
+}
+
+// Test list index assignment: list[index] = value
+bool TestCompileListIndexAssignment() {
+    std::cout << "  TestCompileListIndexAssignment... ";
+    
+    DMCompiler::BytecodeWriter writer;
+    DMCompiler::DMCompiler compiler;
+    DMCompiler::DMObject testObj(0, DMCompiler::DreamPath("/test"));
+    DMCompiler::DMProc proc(0, "test_proc", &testObj, false, DMCompiler::Location());
+    
+    // Add local variables
+    proc.AddLocalVariable("list");
+    proc.AddLocalVariable("index");
+    
+    DMCompiler::DMExpressionCompiler exprCompiler(&compiler, &proc, &writer);
+    
+    // Create AST: list[index] = "value"
+    auto listIdent = std::make_unique<DMCompiler::DMASTIdentifier>(DMCompiler::Location(), "list");
+    auto indexIdent = std::make_unique<DMCompiler::DMASTIdentifier>(DMCompiler::Location(), "index");
+    auto lvalue = std::make_unique<DMCompiler::DMASTDereference>(
+        DMCompiler::Location(),
+        std::move(listIdent),
+        DMCompiler::DereferenceType::Direct,
+        std::move(indexIdent)
+    );
+    
+    auto rvalue = std::make_unique<DMCompiler::DMASTConstantString>(DMCompiler::Location(), "value");
+    
+    auto expr = std::make_unique<DMCompiler::DMASTAssign>(
+        DMCompiler::Location(),
+        std::move(lvalue),
+        DMCompiler::AssignmentOperator::Assign,
+        std::move(rvalue)
+    );
+    
+    // Compile
+    bool success = exprCompiler.CompileExpression(expr.get());
+    assert(success && "Should successfully compile list index assignment");
+    
+    const auto& bytecode = writer.GetBytecode();
+    
+    // Should have:
+    // 1. PushString "value"
+    // 2. PushReferenceValue for 'list'
+    // 3. PushReferenceValue for 'index'
+    // 4. Assign opcode with Index reference (type 13)
+    
+    bool foundPushString = false;
+    bool foundAssign = false;
+    
+    for (size_t i = 0; i < bytecode.size(); i++) {
+        if (bytecode[i] == static_cast<uint8_t>(DMCompiler::DreamProcOpcode::PushString)) {
+            foundPushString = true;
+        }
+        if (bytecode[i] == static_cast<uint8_t>(DMCompiler::DreamProcOpcode::Assign)) {
+            foundAssign = true;
+            // Check that the reference type is Index (13)
+            if (i + 1 < bytecode.size()) {
+                assert(bytecode[i + 1] == 13 && "Reference type should be Index (13)");
+            }
+        }
+    }
+    
+    assert(foundPushString && "Should emit PushString for value");
+    assert(foundAssign && "Should emit Assign opcode");
+    
+    std::cout << "PASSED" << std::endl;
+    return true;
+}
+
 // Test built-in functions
 
 bool TestCompileLocateTypeOnly() {
@@ -2750,6 +3021,10 @@ int RunExpressionCompilerTests() {
         if (!TestCompileInOperatorChained()) failures++;
         if (!TestCompileLogicalAndAssign()) failures++;
         if (!TestCompileLogicalOrAssign()) failures++;
+        if (!TestCompileFieldDereferenceAssignment()) failures++;
+        if (!TestCompileChainedFieldDereferenceAssignment()) failures++;
+        if (!TestCompileFieldDereferenceCompoundAssignment()) failures++;
+        if (!TestCompileListIndexAssignment()) failures++;
         // if (!TestCompileLocateTypeOnly()) failures++;  // TODO: Requires path type support
         if (!TestCompileLocateCoordinates()) failures++;
         if (!TestCompilePick()) failures++;

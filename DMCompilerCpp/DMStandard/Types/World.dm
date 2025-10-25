@@ -1,4 +1,5 @@
-﻿/world
+// world type definition
+/world
 	var/list/contents = null
 	var/list/vars
 
@@ -119,3 +120,4 @@
 	proc/ODHotReloadInterface()
 
 	proc/ODHotReloadResource(var/file_name)
+

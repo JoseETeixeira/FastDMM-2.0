@@ -1,4 +1,4 @@
-﻿// View/Range procs - bounds family
+// View/Range procs - bounds family
 // bounds() has multiple signatures:
 // - bounds(Ref=src, Dist=0)
 // - bounds(Ref, x_offset, y_offset, extra_width=0, extra_height=0)

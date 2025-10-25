@@ -1,4 +1,5 @@
-﻿/sound
+// sound type definition
+/sound
 	parent_type = /datum
 
 	var/file = null
@@ -43,3 +44,4 @@
 			if (wait != null) src.wait = wait
 			if (channel != null) src.channel = channel
 			if (volume != null) src.volume = volume
+

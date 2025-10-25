@@ -1,4 +1,5 @@
-﻿/image
+// image type definition
+/image
 	parent_type = /datum
 
 	//note these values also need to be set in MutableAppearance.cs
@@ -62,3 +63,4 @@
 
 	// The ref does not mention the pixel_x and pixel_y args...
 	New(icon, loc, icon_state, layer, dir, pixel_x, pixel_y)
+

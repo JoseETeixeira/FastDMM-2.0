@@ -6,6 +6,7 @@
 #include <iostream>
 #include <algorithm>
 #include <cctype>
+#include <map>
 
 namespace myg {
 
@@ -22,34 +23,94 @@ Map::Map()
 Map::~Map() = default;
 
 bool Map::Load(const std::string& path, DMCompiler::DMObjectTree* tree) {
-    file_path_ = path;
-    object_tree_ = tree;
+    try {
+        file_path_ = path;
+        object_tree_ = tree;
 
-    // Read file content
-    std::ifstream file(path);
-    if (!file.is_open()) {
-        std::cerr << "Failed to open map file: " << path << std::endl;
+        // Read file content
+        std::ifstream file(path);
+        if (!file.is_open()) {
+            std::cerr << "Failed to open map file: " << path << std::endl;
+            return false;
+        }
+
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        std::string content = buffer.str();
+        file.close();
+
+        // Check if file was empty
+        if (content.empty()) {
+            std::cerr << "Map file is empty: " << path << std::endl;
+            return false;
+        }
+
+        // Parse DMM format
+        if (!ParseDMM(content)) {
+            std::cerr << "Failed to parse DMM file: " << path << std::endl;
+            return false;
+        }
+
+        modified_ = false;
+        std::cout << "Successfully loaded map: " << path << std::endl;
+        std::cout << "  Bounds: (" << bounds_.min_x << "," << bounds_.min_y << "," << bounds_.min_z 
+                  << ") to (" << bounds_.max_x << "," << bounds_.max_y << "," << bounds_.max_z << ")" << std::endl;
+        std::cout << "  Tiles: " << tiles_.size() << ", Instances: " << instances_.size() << std::endl;
+        
+        return true;
+    } catch (const std::ios_base::failure& e) {
+        std::cerr << "I/O error loading map file: " << e.what() << std::endl;
+        return false;
+    } catch (const std::exception& e) {
+        std::cerr << "Error loading map: " << e.what() << std::endl;
         return false;
     }
-
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    std::string content = buffer.str();
-    file.close();
-
-    // Parse DMM format
-    if (!ParseDMM(content)) {
-        std::cerr << "Failed to parse DMM file: " << path << std::endl;
-        return false;
-    }
-
-    modified_ = false;
-    return true;
 }
 
 bool Map::Save(const std::string& path) {
-    // TODO: Implement in task 11
-    return false;
+    try {
+        // Open file for writing
+        std::ofstream file(path);
+        if (!file.is_open()) {
+            std::cerr << "Failed to open map file for writing: " << path << std::endl;
+            return false;
+        }
+
+        // Write tile definitions first
+        if (!WriteTileDefinitions(file)) {
+            std::cerr << "Failed to write tile definitions" << std::endl;
+            file.close();
+            return false;
+        }
+
+        // Write map grid sections
+        if (!WriteMapGrid(file)) {
+            std::cerr << "Failed to write map grid" << std::endl;
+            file.close();
+            return false;
+        }
+
+        file.close();
+        
+        // Check if write was successful
+        if (file.fail()) {
+            std::cerr << "Error occurred while writing map file: " << path << std::endl;
+            return false;
+        }
+        
+        // Update file path and clear modified flag
+        file_path_ = path;
+        modified_ = false;
+        
+        std::cout << "Successfully saved map: " << path << std::endl;
+        return true;
+    } catch (const std::ios_base::failure& e) {
+        std::cerr << "I/O error saving map file: " << e.what() << std::endl;
+        return false;
+    } catch (const std::exception& e) {
+        std::cerr << "Error saving map: " << e.what() << std::endl;
+        return false;
+    }
 }
 
 TileInstance* Map::GetTile(int x, int y, int z) {
@@ -74,39 +135,51 @@ void Map::SetTile(int x, int y, int z, TileInstance* tile) {
 }
 
 bool Map::PlaceObject(int x, int y, int z, const std::string& type_path) {
-    if (type_path.empty()) {
-        return false;
-    }
-
-    // Create a PlaceObjectAction and push it to the undo stack
-    // This will execute the action and add it to the undo stack
-    auto action = std::make_unique<PlaceObjectAction>(x, y, z, type_path);
-    
-    // Ensure tile exists before placing
-    Location loc{x, y, z};
-    TileInstance* tile = GetTile(x, y, z);
-    
-    if (!tile) {
-        // Create a new tile instance
-        auto new_tile = std::make_unique<TileInstance>();
-        
-        // Allocate a key for this tile
-        std::string key = AllocateKey();
-        if (key.empty()) {
-            std::cerr << "Failed to allocate key for new tile" << std::endl;
+    try {
+        if (type_path.empty()) {
+            std::cerr << "Cannot place object: type path is empty" << std::endl;
             return false;
         }
+
+        // Validate coordinates are within reasonable bounds
+        if (x < -1000 || x > 1000 || y < -1000 || y > 1000 || z < 1 || z > 100) {
+            std::cerr << "Cannot place object: coordinates out of bounds (" << x << "," << y << "," << z << ")" << std::endl;
+            return false;
+        }
+
+        // Create a PlaceObjectAction and push it to the undo stack
+        // This will execute the action and add it to the undo stack
+        auto action = std::make_unique<PlaceObjectAction>(x, y, z, type_path);
         
-        // Store the tile instance
-        tile = new_tile.get();
-        instances_[key] = std::move(new_tile);
-        tiles_[loc] = key;
+        // Ensure tile exists before placing
+        Location loc{x, y, z};
+        TileInstance* tile = GetTile(x, y, z);
+        
+        if (!tile) {
+            // Create a new tile instance
+            auto new_tile = std::make_unique<TileInstance>();
+            
+            // Allocate a key for this tile
+            std::string key = AllocateKey();
+            if (key.empty()) {
+                std::cerr << "Failed to allocate key for new tile at (" << x << "," << y << "," << z << ")" << std::endl;
+                return false;
+            }
+            
+            // Store the tile instance
+            tile = new_tile.get();
+            instances_[key] = std::move(new_tile);
+            tiles_[loc] = key;
+        }
+        
+        // Push the action to undo stack (this will execute it)
+        PushUndoState(std::move(action));
+        
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "Error placing object: " << e.what() << std::endl;
+        return false;
     }
-    
-    // Push the action to undo stack (this will execute it)
-    PushUndoState(std::move(action));
-    
-    return true;
 }
 
 void Map::PushUndoState(std::unique_ptr<UndoableAction> action) {
@@ -422,6 +495,87 @@ bool Map::ParseMapGrid(const std::string& section) {
             tiles_[loc] = key;
             current_x++;
         }
+    }
+
+    return true;
+}
+
+bool Map::WriteTileDefinitions(std::ofstream& file) {
+    // Write all tile instance definitions
+    // Sort keys for consistent output
+    std::vector<std::string> sorted_keys;
+    for (const auto& [key, instance] : instances_) {
+        sorted_keys.push_back(key);
+    }
+    std::sort(sorted_keys.begin(), sorted_keys.end());
+
+    for (const auto& key : sorted_keys) {
+        const auto& instance = instances_[key];
+        if (!instance) continue;
+
+        // Write key
+        file << "\"" << key << "\" = (";
+
+        if (is_tgm_format_) {
+            // TGM format: multi-line with proper formatting
+            file << "\n";
+            std::string tile_str = instance->ToTGMString();
+            file << tile_str;
+            file << ")\n";
+        } else {
+            // Standard format: single line
+            std::string tile_str = instance->ToString();
+            file << tile_str;
+            file << ")\n";
+        }
+    }
+
+    return true;
+}
+
+bool Map::WriteMapGrid(std::ofstream& file) {
+    // Group tiles by Z-level
+    std::map<int, std::vector<Location>> tiles_by_z;
+    
+    for (const auto& [loc, key] : tiles_) {
+        tiles_by_z[loc.z].push_back(loc);
+    }
+
+    // Write each Z-level
+    for (const auto& [z, locations] : tiles_by_z) {
+        // Find bounds for this Z-level
+        int min_x = bounds_.max_x;
+        int max_x = bounds_.min_x;
+        int min_y = bounds_.max_y;
+        int max_y = bounds_.min_y;
+
+        for (const auto& loc : locations) {
+            min_x = std::min(min_x, loc.x);
+            max_x = std::max(max_x, loc.x);
+            min_y = std::min(min_y, loc.y);
+            max_y = std::max(max_y, loc.y);
+        }
+
+        // Write grid section header
+        file << "\n(" << min_x << "," << min_y << "," << z << ") = {\"\n";
+
+        // Write grid data row by row
+        for (int y = min_y; y <= max_y; y++) {
+            for (int x = min_x; x <= max_x; x++) {
+                Location loc{x, y, z};
+                auto it = tiles_.find(loc);
+                
+                if (it != tiles_.end()) {
+                    file << it->second;
+                } else {
+                    // Write empty key (should not happen in well-formed maps)
+                    file << std::string(key_length_, 'a');
+                }
+            }
+            file << "\n";
+        }
+
+        file << "\"}\n";
     }
 
     return true;

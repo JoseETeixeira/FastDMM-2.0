@@ -297,30 +297,17 @@ void DMProc::Compile(DMCompiler* compiler) {
         return;
     }
     
-    // Process parameters and add them to local variables
-    // This is essential so identifiers can be resolved during compilation
-    for (const auto* astParam : AstParameters) {
-        if (!astParam) continue;
-        
-        // Determine the type (if specified)
-        std::optional<DreamPath> paramType;
-        if (!astParam->TypePath.GetElements().empty()) {
-            paramType = astParam->TypePath;
-        }
-        
-        // Add parameter as a local variable
-        // The parameter will be accessible during bytecode emission
-        AddParameter(astParam->Name, paramType, astParam->ExplicitValueType);
-    }
+    // NOTE: Parameters are now registered in DMObjectTree::AddProc() during code tree building
+    // This ensures they are available immediately for identifier resolution
+    // No need to register them again here
     
     // TODO: Implement full proc compilation in Phase 4
     // This requires:
-    // 1. ✅ Set up local variable scope (done above for parameters)
-    // 2. ✅ Process parameters and add them to local variables (done above)
-    // 3. Compile AstBody->Statements using DMStatementCompiler
-    // 4. Handle set statements (AstBody->SetStatements)
-    // 5. Emit bytecode using BytecodeEmitter
-    // 6. Add implicit return if needed
+    // 1. ✅ Set up local variable scope (parameters already registered in AddProc)
+    // 2. Compile AstBody->Statements using DMStatementCompiler
+    // 3. Handle set statements (AstBody->SetStatements)
+    // 4. Emit bytecode using BytecodeEmitter
+    // 5. Add implicit return if needed
     
     // For now, compilation is deferred to Phase 4 (bytecode emission)
     // The proc is ready to be compiled when BytecodeEmitter is implemented

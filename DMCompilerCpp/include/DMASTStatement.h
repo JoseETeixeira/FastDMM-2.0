@@ -192,7 +192,31 @@ public:
 /// </summary>
 class DMASTProcStatementForIn : public DMASTProcStatement {
 public:
+    /// <summary>
+    /// Enhanced variable declaration information for for-in loops
+    /// Captures variable name, type path, and type filter from declarations like:
+    /// - for(var/mob/M in world)
+    /// - for(var/mob/M as /mob|mob in world)
+    /// - for(var/atom/movable/A in src)
+    /// </summary>
+    struct VariableDeclaration {
+        std::string Name;                           // Variable name (e.g., "M", "A")
+        std::optional<DreamPath> TypePath;          // Type path (e.g., /mob, /atom/movable)
+        std::optional<std::string> TypeFilter;      // Type filter (e.g., "/mob|mob")
+        Location Loc;                               // Source location
+        
+        VariableDeclaration()
+            : Name(""), TypePath(std::nullopt), TypeFilter(std::nullopt), Loc() {}
+        
+        VariableDeclaration(const std::string& name,
+                          std::optional<DreamPath> typePath = std::nullopt,
+                          std::optional<std::string> typeFilter = std::nullopt,
+                          const Location& loc = Location())
+            : Name(name), TypePath(typePath), TypeFilter(typeFilter), Loc(loc) {}
+    };
+    
     std::unique_ptr<DMASTExpression> Variable; // Could be declaration or identifier
+    VariableDeclaration VarDecl;               // Enhanced variable information
     std::unique_ptr<DMASTExpression> List;
     std::unique_ptr<DMASTProcBlockInner> Body;
     
@@ -201,7 +225,15 @@ public:
                            std::unique_ptr<DMASTExpression> list,
                            std::unique_ptr<DMASTProcBlockInner> body)
         : DMASTProcStatement(location), Variable(std::move(variable)), 
-          List(std::move(list)), Body(std::move(body)) {}
+          VarDecl(), List(std::move(list)), Body(std::move(body)) {}
+    
+    DMASTProcStatementForIn(const Location& location,
+                           std::unique_ptr<DMASTExpression> variable,
+                           const VariableDeclaration& varDecl,
+                           std::unique_ptr<DMASTExpression> list,
+                           std::unique_ptr<DMASTProcBlockInner> body)
+        : DMASTProcStatement(location), Variable(std::move(variable)), 
+          VarDecl(varDecl), List(std::move(list)), Body(std::move(body)) {}
 };
 
 /// <summary>

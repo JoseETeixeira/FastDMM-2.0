@@ -6,6 +6,7 @@
 #include <unordered_set>
 #include <stack>
 #include <memory>
+#include <filesystem>
 #include "Token.h"
 #include "Location.h"
 
@@ -87,6 +88,57 @@ public:
 };
 
 /// <summary>
+/// File context for tracking file state during preprocessing
+/// </summary>
+struct FileContext {
+    std::unique_ptr<DMLexer> Lexer;
+    std::string FilePath;
+    std::string Directory;
+    int IncludeDepth;
+    
+    FileContext(std::unique_ptr<DMLexer> lexer, const std::string& path, int depth)
+        : Lexer(std::move(lexer))
+        , FilePath(path)
+        , Directory(std::filesystem::path(path).parent_path().string())
+        , IncludeDepth(depth)
+    {}
+    
+    // Move constructor
+    FileContext(FileContext&& other) noexcept
+        : Lexer(std::move(other.Lexer))
+        , FilePath(std::move(other.FilePath))
+        , Directory(std::move(other.Directory))
+        , IncludeDepth(other.IncludeDepth)
+    {}
+    
+    // Move assignment
+    FileContext& operator=(FileContext&& other) noexcept {
+        if (this != &other) {
+            Lexer = std::move(other.Lexer);
+            FilePath = std::move(other.FilePath);
+            Directory = std::move(other.Directory);
+            IncludeDepth = other.IncludeDepth;
+        }
+        return *this;
+    }
+    
+    // Delete copy constructor and copy assignment
+    FileContext(const FileContext&) = delete;
+    FileContext& operator=(const FileContext&) = delete;
+};
+
+/// <summary>
+/// Include chain entry for error reporting
+/// </summary>
+struct IncludeChainEntry {
+    std::string FilePath;
+    Location IncludeLocation;
+    
+    IncludeChainEntry(const std::string& path, const Location& loc)
+        : FilePath(path), IncludeLocation(loc) {}
+};
+
+/// <summary>
 /// DM Preprocessor - handles #include, #define, #if, etc.
 /// </summary>
 class DMPreprocessor {
@@ -94,7 +146,12 @@ public:
     explicit DMPreprocessor(DMCompiler* compiler = nullptr);
     ~DMPreprocessor();
 
-    // Main preprocessing entry point
+    // Streaming interface (NEW)
+    bool Initialize(const std::string& rootFilePath);
+    Token GetNextToken();
+    bool IsComplete() const;
+    
+    // Main preprocessing entry point (kept for backward compatibility)
     std::vector<Token> Preprocess(const std::string& filePath);
     
     // Include tracking
@@ -115,9 +172,11 @@ private:
     std::vector<std::string> IncludedMaps_;
     std::string IncludedInterface_;
     
-    // Lexer stack for nested includes
-    std::stack<std::unique_ptr<DMLexer>> LexerStack_;
-    std::stack<std::string> IncludeDirectoryStack_; // Tracks directory for each lexer
+    // File stack for nested includes (NEW - replaces LexerStack_)
+    std::stack<FileContext> FileStack_;
+    
+    // Include chain tracking for error reporting
+    std::vector<IncludeChainEntry> IncludeChain_;
     
     // Token buffering
     std::stack<Token> UnprocessedTokens_;
@@ -129,18 +188,21 @@ private:
     // Include tracking
     std::unordered_set<std::string> IncludedFiles_;
     
+    // Path resolution cache for performance
+    std::unordered_map<std::string, std::string> PathCache_;
+    
     // Conditional compilation state
     std::stack<bool> LastIfEvaluations_;
     bool CanUseDirective_;
     bool CurrentLineContainsNonWhitespace_;
     
-    // Token processing
-    Token GetNextToken();
-    void PushToken(const Token& token);
-    void PushTokens(const std::vector<Token>& tokens);
+    // Token processing (GetNextToken is now public for streaming interface)
+    void PushToken(Token&& token);
+    void PushTokens(std::vector<Token>&& tokens);
+    Token GetNextRawToken(); // NEW: Get token from lexer without preprocessing
     
-    // Directive handlers
-    void HandleIncludeDirective(const Token& token, std::vector<Token>& result);
+    // Directive handlers (batch mode - for backward compatibility)
+    void HandleIncludeDirective(const Token& token);
     void HandleDefineDirective(const Token& token);
     void HandleUndefineDirective(const Token& token);
     void HandleIfDirective(const Token& token);
@@ -152,6 +214,15 @@ private:
     void HandleErrorDirective(const Token& token);
     void HandleWarningDirective(const Token& token);
     void HandlePragmaDirective(const Token& token);
+    
+    // Streaming directive handlers (for GetNextToken)
+    void HandleIncludeDirectiveStreaming(const Token& token);
+    void HandleIfDirectiveStreaming(const Token& token);
+    void HandleIfDefDirectiveStreaming(const Token& token);
+    void HandleIfNDefDirectiveStreaming(const Token& token);
+    void HandleElifDirectiveStreaming(const Token& token);
+    void HandleElseDirectiveStreaming(const Token& token);
+    void HandleEndIfDirectiveStreaming(const Token& token);
     
     // Macro handling
     bool TryExpandMacro(const Token& token);
@@ -165,6 +236,15 @@ private:
     bool IncludeFile(const std::string& path, const Location& includeLocation);
     std::vector<Token> PreprocessFile(const std::string& path, const Location& includeLocation);
     std::string ResolvePath(const std::string& path, const std::string& currentFile);
+    
+    // File stack management (NEW)
+    bool PushFile(const std::string& filePath, const Location& includeLocation);
+    void PopFile();
+    const FileContext* GetCurrentContext() const;
+    
+    // Error reporting helpers
+    std::string GetIncludeChainString() const;
+    void ReportError(const Location& loc, const std::string& message);
     
     // Helpers
     Token ConsumeToken();

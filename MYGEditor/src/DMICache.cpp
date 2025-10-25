@@ -40,26 +40,50 @@ std::string DMICache::BuildFilePath(const std::string& icon_path) const {
 }
 
 DMI* DMICache::GetDMI(const std::string& icon_path) {
-    // Check if already cached
-    auto it = cache_.find(icon_path);
-    if (it != cache_.end()) {
-        return it->second.get();
+    try {
+        // Check if already cached
+        auto it = cache_.find(icon_path);
+        if (it != cache_.end()) {
+            return it->second.get();
+        }
+
+        // Validate icon path
+        if (icon_path.empty()) {
+            std::cerr << "Warning: Empty icon path, using placeholder" << std::endl;
+            return placeholder_dmi_.get();
+        }
+
+        // Build full file path
+        std::string full_path = BuildFilePath(icon_path);
+
+        // Check if file exists before trying to load
+        if (!std::filesystem::exists(full_path)) {
+            std::cerr << "Warning: DMI file not found: " << full_path << " (using placeholder)" << std::endl;
+            // Cache the placeholder for this path to avoid repeated warnings
+            cache_[icon_path] = nullptr;
+            return placeholder_dmi_.get();
+        }
+
+        // Try to load the DMI
+        auto dmi = std::make_unique<DMI>();
+        if (dmi->Load(full_path)) {
+            DMI* dmi_ptr = dmi.get();
+            cache_[icon_path] = std::move(dmi);
+            std::cout << "Loaded DMI: " << icon_path << std::endl;
+            return dmi_ptr;
+        }
+
+        // File exists but failed to load - return placeholder
+        std::cerr << "Warning: Failed to parse DMI: " << full_path << " (using placeholder)" << std::endl;
+        cache_[icon_path] = nullptr;
+        return placeholder_dmi_.get();
+    } catch (const std::filesystem::filesystem_error& e) {
+        std::cerr << "Filesystem error loading DMI '" << icon_path << "': " << e.what() << " (using placeholder)" << std::endl;
+        return placeholder_dmi_.get();
+    } catch (const std::exception& e) {
+        std::cerr << "Error loading DMI '" << icon_path << "': " << e.what() << " (using placeholder)" << std::endl;
+        return placeholder_dmi_.get();
     }
-
-    // Build full file path
-    std::string full_path = BuildFilePath(icon_path);
-
-    // Try to load the DMI
-    auto dmi = std::make_unique<DMI>();
-    if (dmi->Load(full_path)) {
-        DMI* dmi_ptr = dmi.get();
-        cache_[icon_path] = std::move(dmi);
-        return dmi_ptr;
-    }
-
-    // File not found or failed to load - return placeholder
-    std::cerr << "Failed to load DMI: " << full_path << " (using placeholder)" << std::endl;
-    return placeholder_dmi_.get();
 }
 
 void DMICache::Clear() {

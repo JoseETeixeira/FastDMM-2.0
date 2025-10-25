@@ -411,6 +411,9 @@ bool DMCompiler::ProcessObjectStatement(DMASTStatement* statement, const DreamPa
     
     // Variable definition: var/name = "value"
     else if (auto* varDef = dynamic_cast<DMASTObjectVarDefinition*>(statement)) {
+        if (Settings_.Verbose) {
+            std::cout << "  Found variable definition statement for: " << varDef->Name << std::endl;
+        }
         return ProcessVarDefinition(varDef, currentPath);
     }
     
@@ -429,6 +432,10 @@ bool DMCompiler::ProcessObjectStatement(DMASTStatement* statement, const DreamPa
         if (Settings_.Verbose) {
             std::cout << "  Skipping unknown statement type at " 
                       << statement->Location_.ToString() << std::endl;
+            // Try to identify the type for debugging
+            if (dynamic_cast<DMASTObjectDefinition*>(statement)) {
+                std::cout << "    (It's an ObjectDefinition that wasn't caught earlier)" << std::endl;
+            }
         }
         return true;  // Continue processing
     }
@@ -438,15 +445,27 @@ bool DMCompiler::ProcessObjectDefinition(DMASTObjectDefinition* objDef, const Dr
     // Combine current path with the object's path
     DreamPath fullPath = currentPath.Combine(objDef->Path.Path);
     
-    if (Settings_.Verbose) {
-        std::cout << "  Defining object: " << fullPath.ToString() << std::endl;
-    }
-    
-    // Create or get the DMObject
-    DMObject* obj = ObjectTree_->GetOrCreateDMObject(fullPath);
-    if (!obj) {
-        ForcedError(objDef->Location_, "Failed to create object: " + fullPath.ToString());
-        return false;
+    // Check if this is a "var" block (path ends with "var")
+    // In this case, we don't create an object, we just process the inner statements
+    // which will be variable definitions
+    bool isVarBlock = false;
+    auto elements = fullPath.GetElements();
+    if (!elements.empty() && elements.back() == "var") {
+        isVarBlock = true;
+        if (Settings_.Verbose) {
+            std::cout << "  Processing var block at: " << fullPath.ToString() << std::endl;
+        }
+    } else {
+        if (Settings_.Verbose) {
+            std::cout << "  Defining object: " << fullPath.ToString() << std::endl;
+        }
+        
+        // Create or get the DMObject
+        DMObject* obj = ObjectTree_->GetOrCreateDMObject(fullPath);
+        if (!obj) {
+            ForcedError(objDef->Location_, "Failed to create object: " + fullPath.ToString());
+            return false;
+        }
     }
     
     // Process all inner statements (vars, procs, nested objects)
@@ -460,11 +479,34 @@ bool DMCompiler::ProcessObjectDefinition(DMASTObjectDefinition* objDef, const Dr
 }
 
 bool DMCompiler::ProcessVarDefinition(DMASTObjectVarDefinition* varDef, const DreamPath& currentPath) {
-    // The actual object path is varDef->TypePath minus the variable name
-    // For var/global/TEST_GLOBAL, TypePath is /global/TEST_GLOBAL, name is TEST_GLOBAL
-    // So the object path is /global
+    // The parser now correctly separates the variable name and type
+    // TypePath contains just the type (e.g., "Beam" for "Beam/myBeam")
+    // currentPath contains the owner object path (e.g., "/mob" or "/mob/var")
+    // varDef->Name contains the variable name (e.g., "myBeam")
     
-    DreamPath actualObjectPath = varDef->TypePath.Path.RemoveLastElement();
+    if (Settings_.Verbose) {
+        std::cout << "  Processing var definition: " << varDef->Name 
+                  << " with type: " << varDef->TypePath.Path.ToString()
+                  << " on object: " << currentPath.ToString() << std::endl;
+    }
+    
+    // Remove "var" from currentPath if present to get the actual object path
+    std::vector<std::string> objectPathElements = currentPath.GetElements();
+    for (auto it = objectPathElements.begin(); it != objectPathElements.end(); ++it) {
+        if (*it == "var") {
+            objectPathElements.erase(it);
+            if (Settings_.Verbose) {
+                std::cout << "    Removed 'var' from object path" << std::endl;
+            }
+            break;
+        }
+    }
+    
+    DreamPath actualObjectPath = DreamPath(currentPath.GetPathType(), objectPathElements);
+    
+    if (Settings_.Verbose) {
+        std::cout << "    Actual object path: " << actualObjectPath.ToString() << std::endl;
+    }
     
     // Check if this is a global variable (defined on /global)
     if (actualObjectPath.ToString() == "/global") {

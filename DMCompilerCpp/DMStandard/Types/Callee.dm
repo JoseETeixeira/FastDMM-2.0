@@ -1,4 +1,5 @@
-﻿/callee
+// callee type definition
+/callee
 	var/proc
 	var/args
 	var/caller as /callee|null

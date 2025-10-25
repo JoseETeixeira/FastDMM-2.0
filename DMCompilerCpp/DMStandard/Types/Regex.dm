@@ -1,4 +1,5 @@
-﻿/regex
+// regex type definition
+/regex
 	parent_type = /datum
 
 	var/flags
@@ -32,3 +33,4 @@
 
 proc/regex(pattern, flags)
 	return new /regex(pattern, flags)
+

@@ -73,18 +73,34 @@ void DMCodeTreeBuilder::ProcessStatement(DMASTStatement* statement, const DreamP
     if (auto* objectDef = dynamic_cast<DMASTObjectDefinition*>(statement)) {
         DreamPath typePath = objectDef->Path.Path;
         
-        // Add the type to the object tree
-        ObjectTree_->AddType(typePath);
-        
-        // Process inner statements - convert vector<unique_ptr<DMASTObjectStatement>> to vector<unique_ptr<DMASTStatement>>
-        std::vector<std::unique_ptr<DMASTStatement>> innerStatements;
-        for (const auto& innerStmt : objectDef->InnerStatements) {
-            // We can't move from the const vector, so we'll just process them directly
+        // Convert relative paths to absolute paths
+        // Root-level relative paths like "mob" should become "/mob"
+        if (typePath.GetPathType() == DreamPath::PathType::Relative) {
+            // Combine with current type to get absolute path
+            typePath = currentType.Combine(typePath);
         }
         
-        // Process inner statements directly without conversion
+        // Check if this is a "var" block (path ends with "var")
+        // In this case, we don't create a type, we just process the inner statements
+        // with the type path (without "var")
+        bool isVarBlock = false;
+        DreamPath innerType = typePath;
+        auto elements = typePath.GetElements();
+        if (!elements.empty() && elements.back() == "var") {
+            isVarBlock = true;
+            // Remove "var" from the path to get the actual type
+            innerType = typePath.RemoveLastElement();
+            if (Compiler_->GetSettings().Verbose) {
+                std::cout << "  Processing var block at: " << typePath.ToString() 
+                         << " (type: " << innerType.ToString() << ")" << std::endl;
+            }
+        } else {
+            // Add the type to the object tree
+            ObjectTree_->AddType(typePath);
+        }
+        
         for (const auto& innerStmt : objectDef->InnerStatements) {
-            ProcessStatement(innerStmt.get(), typePath);
+            ProcessStatement(innerStmt.get(), innerType);
         }
     }
     // Variable definition: var/name = value

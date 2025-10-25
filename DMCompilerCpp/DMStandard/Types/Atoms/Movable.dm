@@ -1,4 +1,5 @@
-﻿/atom/movable
+// atom movable type definition
+/atom/movable
 	var/screen_loc
 
 	var/animate_movement = FORWARD_STEPS as opendream_unimplemented
@@ -59,3 +60,4 @@
 			return TRUE
 		else
 			return FALSE
+

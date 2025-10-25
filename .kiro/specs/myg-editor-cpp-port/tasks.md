@@ -302,9 +302,9 @@
     - Update viewport after undo/redo
     - _Requirements: 10.2, 10.3, 10.4_
 
-- [ ] 11. Implement map saving
+- [x] 11. Implement map saving
 
-  - [ ] 11.1 Implement DMM serialization
+  - [x] 11.1 Implement DMM serialization
 
     - Create Map::Save() to write DMM file format
     - Serialize tile instances to key definitions
@@ -313,7 +313,7 @@
     - Preserve key assignments where possible
     - _Requirements: 9.1, 9.2_
 
-  - [ ] 11.2 Implement save workflow
+  - [x] 11.2 Implement save workflow
 
     - Handle Ctrl+S keyboard shortcut
     - Handle File > Save menu item
@@ -322,7 +322,7 @@
     - Display error dialog on save failure
     - _Requirements: 9.1, 9.3, 9.4_
 
-  - [ ] 11.3 Implement unsaved changes prompt
+  - [x] 11.3 Implement unsaved changes prompt
     - Detect when user closes map tab with unsaved changes
     - Display confirmation dialog with Save/Discard/Cancel options
     - Save map if user chooses Save
@@ -330,16 +330,16 @@
     - Cancel close if user chooses Cancel
     - _Requirements: 9.5_
 
-- [ ] 12. Implement Z-level support
+- [x] 12. Implement Z-level support
 
-  - [ ] 12.1 Add Z-level selector to GUI
+  - [x] 12.1 Add Z-level selector to GUI
 
     - Create Z-level spinner control in status bar or toolbar
     - Set range based on map bounds (min_z to max_z)
     - Handle value change to update current Z-level
     - _Requirements: 15.1, 15.2_
 
-  - [ ] 12.2 Filter rendering and editing by Z-level
+  - [x] 12.2 Filter rendering and editing by Z-level
 
     - Pass current Z-level to RenderMap()
     - Only render tiles matching current Z-level
@@ -347,15 +347,15 @@
     - Update status bar to show current Z-level
     - _Requirements: 15.2, 15.3, 15.4_
 
-  - [ ] 12.3 Preserve Z-levels in map save
+  - [x] 12.3 Preserve Z-levels in map save
     - Ensure Save() writes all Z-levels to file
     - Group tiles by Z-level in output
     - Maintain Z-level order
     - _Requirements: 15.5_
 
-- [ ] 13. Implement ObjectTreeManager wrapper
+- [x] 13. Implement ObjectTreeManager wrapper
 
-  - [ ] 13.1 Create ObjectTreeManager class
+  - [x] 13.1 Create ObjectTreeManager class
 
     - Implement SetObjectTree() to store DMObjectTree pointer
     - Implement GetRoot() to return root object
@@ -363,23 +363,23 @@
     - Implement GetObjectByPath() with path lookup
     - _Requirements: 7.1, 7.2_
 
-  - [ ] 13.2 Add caching for performance
+  - [x] 13.2 Add caching for performance
 
     - Cache path lookups in unordered_map
     - Cache children lists for each object
     - Invalidate cache when object tree changes
     - _Requirements: 7.1_
 
-  - [ ] 13.3 Implement variable resolution with inheritance
+  - [x] 13.3 Implement variable resolution with inheritance
     - Create GetVariable() to look up variable value
     - Walk up parent chain if variable not found on object
     - Return default value if not found in hierarchy
     - Implement GetAllVariables() to collect all inherited variables
     - _Requirements: 7.3, 12.2_
 
-- [ ] 14. Polish and error handling
+- [x] 14. Polish and error handling
 
-  - [ ] 14.1 Add comprehensive error handling
+  - [x] 14.1 Add comprehensive error handling
 
     - Wrap file I/O in try-catch blocks
     - Display user-friendly error messages for common failures
@@ -388,14 +388,14 @@
     - Handle invalid object references in maps
     - _Requirements: 1.3, 2.4, 4.4, 5.5, 9.4_
 
-  - [ ] 14.2 Implement loading indicators
+  - [x] 14.2 Implement loading indicators
 
     - Show progress dialog during project compilation
     - Show progress dialog during large map loading
     - Display "Loading..." text in viewport during map load
     - _Requirements: 2.2_
 
-  - [ ] 14.3 Add keyboard shortcuts reference
+  - [x] 14.3 Add keyboard shortcuts reference
     - Create Help > Keyboard Shortcuts menu item
     - Display dialog with list of all shortcuts
     - Include common operations (save, undo, redo, etc.)

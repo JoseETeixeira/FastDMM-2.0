@@ -1,4 +1,5 @@
-﻿/mob
+// mob type definition
+/mob
 	parent_type = /atom/movable
 
 	var/client/client
@@ -18,3 +19,4 @@
 	proc/Login()
 
 	proc/Logout()
+

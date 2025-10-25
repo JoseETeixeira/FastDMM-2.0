@@ -1,4 +1,5 @@
-﻿/client
+// Client type definition
+/client
 	var/list/verbs = null
 	var/list/screen = null
 	var/list/images = null

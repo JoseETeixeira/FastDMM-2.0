@@ -168,6 +168,9 @@ void MYGEditor::ProcessEvents() {
                 if (event.key.key == SDLK_ESCAPE) {
                     running_ = false;
                 }
+                if (event.key.key == SDLK_F1) {
+                    gui_manager_->ShowKeyboardShortcutsDialog();
+                }
                 break;
 
             case SDL_EVENT_WINDOW_RESIZED:
@@ -240,7 +243,30 @@ void MYGEditor::Render() {
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // TODO: Render map viewport here
+    // Render map viewport
+    auto* current_map = map_manager_->GetCurrentMap();
+    if (current_map && project_manager_->HasValidObjectTree()) {
+        renderer_->BeginFrame();
+        
+        // Get current Z-level from GUI
+        int current_z_level = gui_manager_->GetCurrentZLevel();
+        
+        // Render the map at the current Z-level
+        // Note: DMICache is not yet implemented, passing nullptr for now
+        renderer_->RenderMap(
+            current_map,
+            current_z_level,
+            *camera_,
+            nullptr,  // DMICache - to be implemented in task 4
+            project_manager_->GetObjectTree()
+        );
+        
+        renderer_->EndFrame();
+    } else {
+        // No map loaded - display message
+        renderer_->BeginFrame();
+        renderer_->EndFrame();
+    }
 
     // Start ImGui frame
     gui_manager_->BeginFrame();
@@ -265,19 +291,42 @@ void MYGEditor::Render() {
     int mouse_x, mouse_y;
     input_handler_->GetMousePosition(mouse_x, mouse_y);
     
-    // Convert to tile coordinates (placeholder)
-    int tile_x = 0, tile_y = 0, tile_z = 1;
+    // Convert to tile coordinates
+    int tile_x = 0, tile_y = 0;
+    camera_->ScreenToWorld(mouse_x, mouse_y, tile_x, tile_y);
+    int tile_z = gui_manager_->GetCurrentZLevel();
     
-    // Get current map path
+    // Get current map path and bounds
     std::string map_path;
+    int min_z = 1, max_z = 1;
     if (map_manager_->GetCurrentMap()) {
         map_path = map_manager_->GetCurrentMap()->GetFilePath();
+        const auto& bounds = map_manager_->GetCurrentMap()->GetBounds();
+        min_z = bounds.min_z;
+        max_z = bounds.max_z;
     }
     
-    gui_manager_->RenderStatusBar(map_path, tile_x, tile_y, tile_z, camera_->GetZoom());
+    gui_manager_->RenderStatusBar(map_path, tile_x, tile_y, tile_z, camera_->GetZoom(), min_z, max_z);
+
+    // Render viewport overlay if no map is loaded
+    if (!map_manager_->GetCurrentMap()) {
+        if (project_manager_->HasValidObjectTree()) {
+            gui_manager_->RenderViewportOverlay("No map loaded\nFile > Open Map to begin");
+        } else {
+            gui_manager_->RenderViewportOverlay("No project loaded\nFile > Open Project to begin");
+        }
+    }
 
     // Render dialogs (these need to be rendered every frame to stay open)
     gui_manager_->RenderErrorDialog();
+    gui_manager_->RenderLoadingDialog();
+    gui_manager_->RenderKeyboardShortcutsDialog();
+
+    // Render unsaved changes dialog and handle result
+    int unsaved_result = gui_manager_->RenderUnsavedChangesDialog();
+    if (unsaved_result > 0) {
+        HandleUnsavedChangesDialogResult(unsaved_result);
+    }
 
     // Render context menu and handle actions
     int context_action = gui_manager_->RenderTileContextMenu();
@@ -352,10 +401,20 @@ void MYGEditor::OnOpenMap() {
     
     std::string path;
     if (gui_manager_->ShowOpenMapDialog(path)) {
-        if (map_manager_->LoadMap(path, project_manager_->GetObjectTree())) {
-            // Map loaded successfully
-        } else {
-            gui_manager_->ShowErrorDialog("Error", "Failed to load map");
+        // Show loading dialog
+        gui_manager_->ShowLoadingDialog("Loading map...", 0.0f);
+        
+        // Load the map
+        bool success = map_manager_->LoadMap(path, project_manager_->GetObjectTree());
+        
+        // Update progress
+        gui_manager_->ShowLoadingDialog("Map loaded", 1.0f);
+        
+        // Close loading dialog after a brief moment
+        gui_manager_->CloseLoadingDialog();
+        
+        if (!success) {
+            gui_manager_->ShowErrorDialog("Error", "Failed to load map: " + path);
         }
     }
 }
@@ -367,10 +426,17 @@ void MYGEditor::OnSaveMap() {
         return;
     }
     
-    if (current_map->Save(current_map->GetFilePath())) {
-        // Map saved successfully
+    const std::string& file_path = current_map->GetFilePath();
+    if (file_path.empty()) {
+        gui_manager_->ShowErrorDialog("Error", "Map has no file path");
+        return;
+    }
+    
+    if (current_map->Save(file_path)) {
+        // Map saved successfully - modified flag is cleared in Map::Save()
+        std::cout << "Map saved successfully: " << file_path << std::endl;
     } else {
-        gui_manager_->ShowErrorDialog("Error", "Failed to save map");
+        gui_manager_->ShowErrorDialog("Save Failed", "Failed to save map to: " + file_path);
     }
 }
 
@@ -424,9 +490,8 @@ void MYGEditor::OnViewportLeftClick(int screen_x, int screen_y) {
     int world_x, world_y;
     camera_->ScreenToWorld(screen_x, screen_y, world_x, world_y);
 
-    // Get current Z-level (for now, use z=1 as default)
-    // TODO: Get actual Z-level from GUI when Z-level support is implemented
-    int world_z = 1;
+    // Get current Z-level from GUI
+    int world_z = gui_manager_->GetCurrentZLevel();
 
     // Place the object
     if (current_map->PlaceObject(world_x, world_y, world_z, selected_path)) {
@@ -447,8 +512,8 @@ void MYGEditor::OnViewportRightClick(int screen_x, int screen_y) {
     int world_x, world_y;
     camera_->ScreenToWorld(screen_x, screen_y, world_x, world_y);
 
-    // Get current Z-level (for now, use z=1 as default)
-    int world_z = 1;
+    // Get current Z-level from GUI
+    int world_z = gui_manager_->GetCurrentZLevel();
 
     // Get the tile at this location
     TileInstance* tile = current_map->GetTile(world_x, world_y, world_z);
@@ -495,6 +560,51 @@ void MYGEditor::HandleContextMenuAction(int action) {
         default:
             break;
     }
+}
+
+void MYGEditor::HandleUnsavedChangesDialogResult(int result) {
+    int map_index = gui_manager_->GetPendingCloseMapIndex();
+    if (map_index < 0) {
+        return;
+    }
+
+    switch (result) {
+        case 1: { // Save
+            // Get the map to save
+            const auto& open_maps = map_manager_->GetOpenMaps();
+            if (map_index >= 0 && map_index < static_cast<int>(open_maps.size())) {
+                auto* map = open_maps[map_index].get();
+                if (map) {
+                    const std::string& file_path = map->GetFilePath();
+                    if (map->Save(file_path)) {
+                        std::cout << "Map saved successfully before closing: " << file_path << std::endl;
+                        // Now close the map
+                        map_manager_->CloseMap(map_index);
+                    } else {
+                        gui_manager_->ShowErrorDialog("Save Failed", "Failed to save map before closing");
+                    }
+                }
+            }
+            break;
+        }
+        
+        case 2: // Discard
+            // Close the map without saving
+            map_manager_->CloseMap(map_index);
+            std::cout << "Map closed without saving" << std::endl;
+            break;
+        
+        case 3: // Cancel
+            // Do nothing, keep the map open
+            std::cout << "Close cancelled" << std::endl;
+            break;
+        
+        default:
+            break;
+    }
+
+    // Clear the pending close index
+    gui_manager_->ClearPendingCloseMapIndex();
 }
 
 } // namespace myg

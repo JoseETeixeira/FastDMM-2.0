@@ -106,8 +106,27 @@ public:
      * @param tile_y Tile Y coordinate under mouse
      * @param tile_z Current Z-level
      * @param zoom Current zoom level
+     * @param min_z Minimum Z-level in the map
+     * @param max_z Maximum Z-level in the map
      */
-    void RenderStatusBar(const std::string& map_file_path, int tile_x, int tile_y, int tile_z, float zoom);
+    void RenderStatusBar(const std::string& map_file_path, int tile_x, int tile_y, int tile_z, float zoom, int min_z = 1, int max_z = 1);
+
+    /**
+     * Render viewport overlay text (e.g., "Loading...", "No map loaded")
+     * @param message Message to display
+     */
+    void RenderViewportOverlay(const std::string& message);
+
+    /**
+     * Show keyboard shortcuts dialog
+     */
+    void ShowKeyboardShortcutsDialog();
+
+    /**
+     * Render keyboard shortcuts dialog if it's open
+     * This should be called every frame after BeginFrame()
+     */
+    void RenderKeyboardShortcutsDialog();
 
     /**
      * Show file picker dialog for opening a project
@@ -137,6 +156,25 @@ public:
     void CloseCompilationDialog();
 
     /**
+     * Show loading progress dialog
+     * @param message Status message
+     * @param progress Progress value (0.0 to 1.0)
+     * @return true if dialog is still open, false if closed
+     */
+    bool ShowLoadingDialog(const std::string& message, float progress);
+
+    /**
+     * Close the loading progress dialog
+     */
+    void CloseLoadingDialog();
+
+    /**
+     * Render loading dialog if it's open
+     * This should be called every frame after BeginFrame()
+     */
+    void RenderLoadingDialog();
+
+    /**
      * Show error dialog
      * @param title Dialog title
      * @param message Error message
@@ -153,6 +191,36 @@ public:
      * Close the error dialog
      */
     void CloseErrorDialog();
+
+    /**
+     * Show unsaved changes confirmation dialog
+     * @param filename Name of the file with unsaved changes
+     * @return 0=still open, 1=save, 2=discard, 3=cancel
+     */
+    int ShowUnsavedChangesDialog(const std::string& filename);
+
+    /**
+     * Render the unsaved changes dialog if it's open
+     * This should be called every frame after BeginFrame()
+     * @return 0=still open, 1=save, 2=discard, 3=cancel
+     */
+    int RenderUnsavedChangesDialog();
+
+    /**
+     * Close the unsaved changes dialog
+     */
+    void CloseUnsavedChangesDialog();
+
+    /**
+     * Get the pending close map index
+     * @return Map index pending close, or -1 if none
+     */
+    int GetPendingCloseMapIndex() const { return pending_close_map_index_; }
+
+    /**
+     * Clear the pending close map index
+     */
+    void ClearPendingCloseMapIndex() { pending_close_map_index_ = -1; }
 
     /**
      * Get the selected object path from the object tree panel
@@ -221,6 +289,16 @@ public:
      */
     void SetInspectorVisible(bool visible) { show_inspector_ = visible; }
 
+    /**
+     * Get the current Z-level from the GUI
+     */
+    int GetCurrentZLevel() const { return current_z_level_; }
+
+    /**
+     * Set the current Z-level in the GUI
+     */
+    void SetCurrentZLevel(int z_level) { current_z_level_ = z_level; }
+
 private:
     bool initialized_;
     SDL_Window* window_;
@@ -233,7 +311,8 @@ private:
 
     // Selected state
     std::string selected_object_path_;
-    int selected_z_level_;
+    int selected_z_level_;  // Deprecated - use current_z_level_ instead
+    int current_z_level_;   // Current Z-level for editing and rendering
 
     // Dialog state
     bool show_error_dialog_;
@@ -243,6 +322,15 @@ private:
     bool show_compilation_dialog_;
     std::string compilation_message_;
     float compilation_progress_;
+
+    bool show_loading_dialog_;
+    std::string loading_message_;
+    float loading_progress_;
+
+    bool show_unsaved_changes_dialog_;
+    std::string unsaved_changes_filename_;
+    int unsaved_changes_result_;
+    int pending_close_map_index_;
 
     // Context menu state
     bool show_context_menu_;
@@ -258,6 +346,8 @@ private:
     ::DMCompiler::DMObjectTree* variable_editor_object_tree_;
     std::unordered_map<std::string, std::string> variable_editor_values_;
     bool variable_editor_confirmed_;
+
+    bool show_keyboard_shortcuts_dialog_;
 
     /**
      * Render a single object tree node recursively

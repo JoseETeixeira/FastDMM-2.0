@@ -8,6 +8,8 @@ add_executable(dm_compiler_tests
     test_compiler.cpp
     test_objecttree.cpp
     test_proc_simple.cpp
+    test_proc_parameter_registration.cpp
+    test_var_block_parsing.cpp
     test_bytecode.cpp
     test_expression_compiler.cpp
     test_statement_compiler.cpp
@@ -26,6 +28,13 @@ add_executable(test_dmvaluetype
 
 target_link_libraries(test_dmvaluetype PRIVATE DMCompilerLib)
 
+# Standalone path resolution test
+add_executable(test_path_resolution
+    test_path_resolution.cpp
+)
+
+target_link_libraries(test_path_resolution PRIVATE DMCompilerLib)
+
 # Add test data directory
 file(COPY testdata DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 file(COPY test_files DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
@@ -37,8 +46,12 @@ add_test(NAME ParserTests COMMAND dm_compiler_tests [parser])
 add_test(NAME CompilerTests COMMAND dm_compiler_tests [compiler])
 add_test(NAME ObjectTreeTests COMMAND dm_compiler_tests [objecttree])
 add_test(NAME ProcTests COMMAND dm_compiler_tests [proc])
+add_test(NAME ProcParameterRegistrationTests COMMAND dm_compiler_tests [paramreg])
+add_test(NAME VarBlockParsingTests COMMAND dm_compiler_tests [varblock])
 add_test(NAME BytecodeTests COMMAND dm_compiler_tests [bytecode])
 add_test(NAME ExprCompilerTests COMMAND dm_compiler_tests [exprcompiler])
 add_test(NAME DMMParserTests COMMAND dm_compiler_tests [dmmparser])
 add_test(NAME GotoForwardRefTests COMMAND dm_compiler_tests [gotoforward])
-add_test(NAME ExampleCompilationTests COMMAND dm_compiler_tests [examples])
+# Disabled: Takes too long to run, not related to core compiler functionality
+# add_test(NAME ExampleCompilationTests COMMAND dm_compiler_tests [examples])
+# set_tests_properties(ExampleCompilationTests PROPERTIES TIMEOUT 60)

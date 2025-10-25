@@ -141,10 +141,15 @@ DMObject* DMObjectTree::GetType(const DreamPath& path, DMObject* context) {
 
 DMProc* DMObjectTree::GetProc(DMObject* obj, const std::string& procName) {
     if (!obj) {
+        // If no object context, try global procs only
+        int globalProcId = GetGlobalProcId(procName);
+        if (globalProcId >= 0 && globalProcId < static_cast<int>(AllProcs.size())) {
+            return AllProcs[globalProcId].get();
+        }
         return nullptr;
     }
     
-    // Get proc IDs from the object (searches inheritance chain)
+    // 1. Search current object and parent chain for the proc
     const std::vector<int>* procIds = obj->GetProcs(procName);
     if (procIds && !procIds->empty()) {
         // Return the first proc (most derived)
@@ -152,6 +157,22 @@ DMProc* DMObjectTree::GetProc(DMObject* obj, const std::string& procName) {
         if (procId >= 0 && procId < static_cast<int>(AllProcs.size())) {
             return AllProcs[procId].get();
         }
+    }
+    
+    // 2. If not found in object hierarchy, search global procs
+    int globalProcId = GetGlobalProcId(procName);
+    if (globalProcId >= 0 && globalProcId < static_cast<int>(AllProcs.size())) {
+        return AllProcs[globalProcId].get();
+    }
+    
+    // 3. Not found anywhere - return nullptr with appropriate diagnostic
+    if (Compiler_) {
+        std::string msg = "Proc '" + procName + "' not found";
+        if (obj) {
+            msg += " in type " + obj->Path.ToString() + " or its parents";
+        }
+        msg += " or in global procs";
+        // Note: This is just for internal tracking - actual warnings are emitted by DMExpressionCompiler
     }
     
     return nullptr;
@@ -391,6 +412,17 @@ void DMObjectTree::AddProc(const DreamPath& owner, DMASTObjectProcDefinition* pr
     // Store the parameter definitions (non-owning pointers)
     for (const auto& param : procDef->Parameters) {
         proc->AstParameters.push_back(param.get());
+    }
+    
+    // Register parameters as local variables immediately
+    // This ensures parameters are available for identifier resolution during compilation
+    for (const auto& param : procDef->Parameters) {
+        std::optional<DreamPath> paramType;
+        if (!param->TypePath.GetElements().empty()) {
+            paramType = param->TypePath;
+        }
+        
+        proc->AddParameter(param->Name, paramType, param->ExplicitValueType);
     }
     
     // Add the proc to the object

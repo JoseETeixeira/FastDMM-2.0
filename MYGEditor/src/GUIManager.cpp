@@ -23,9 +23,15 @@ GUIManager::GUIManager()
     , show_inspector_(true)
     , show_demo_window_(false)
     , selected_z_level_(1)
+    , current_z_level_(1)
     , show_error_dialog_(false)
     , show_compilation_dialog_(false)
     , compilation_progress_(0.0f)
+    , show_loading_dialog_(false)
+    , loading_progress_(0.0f)
+    , show_unsaved_changes_dialog_(false)
+    , unsaved_changes_result_(0)
+    , pending_close_map_index_(-1)
     , show_context_menu_(false)
     , context_menu_x_(0)
     , context_menu_y_(0)
@@ -36,6 +42,7 @@ GUIManager::GUIManager()
     , variable_editor_object_(nullptr)
     , variable_editor_object_tree_(nullptr)
     , variable_editor_confirmed_(false)
+    , show_keyboard_shortcuts_dialog_(false)
 {
 }
 
@@ -201,6 +208,12 @@ void GUIManager::RenderMainMenuBar(const MenuCallbacks& callbacks, Map* current_
         }
         
         if (ImGui::BeginMenu("Help")) {
+            if (ImGui::MenuItem("Keyboard Shortcuts", "F1")) {
+                ShowKeyboardShortcutsDialog();
+            }
+            
+            ImGui::Separator();
+            
             if (ImGui::MenuItem("About")) {
                 // TODO: Show about dialog
             }
@@ -331,8 +344,24 @@ void GUIManager::RenderMapTabs(MapManager* map_manager) {
             
             // Handle tab close
             if (!tab_open) {
-                // TODO: Check for unsaved changes
-                map_manager->CloseMap(static_cast<int>(i));
+                // Check for unsaved changes
+                if (map->IsModified()) {
+                    // Extract filename from path
+                    std::string close_filename = map->GetFilePath();
+                    size_t last_slash = close_filename.find_last_of("/\\");
+                    if (last_slash != std::string::npos) {
+                        close_filename = close_filename.substr(last_slash + 1);
+                    }
+                    
+                    // Show unsaved changes dialog
+                    ShowUnsavedChangesDialog(close_filename);
+                    
+                    // Store the map index to close after dialog is handled
+                    pending_close_map_index_ = static_cast<int>(i);
+                } else {
+                    // No unsaved changes, close immediately
+                    map_manager->CloseMap(static_cast<int>(i));
+                }
             }
         }
         
@@ -389,7 +418,7 @@ void GUIManager::RenderInspectorPanel(TileInstance* selected_tile, ::DMCompiler:
     ImGui::End();
 }
 
-void GUIManager::RenderStatusBar(const std::string& map_file_path, int tile_x, int tile_y, int tile_z, float zoom) {
+void GUIManager::RenderStatusBar(const std::string& map_file_path, int tile_x, int tile_y, int tile_z, float zoom, int min_z, int max_z) {
     // Get main viewport
     ImGuiViewport* viewport = ImGui::GetMainViewport();
     
@@ -421,6 +450,23 @@ void GUIManager::RenderStatusBar(const std::string& map_file_path, int tile_x, i
         
         // Display zoom level
         ImGui::Text("Zoom: %.0fpx", zoom);
+        ImGui::SameLine();
+        ImGui::Text("|");
+        ImGui::SameLine();
+        
+        // Z-level selector
+        ImGui::Text("Z-Level:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(80);
+        if (ImGui::InputInt("##zlevel", &current_z_level_, 1, 1)) {
+            // Clamp Z-level to valid range
+            if (current_z_level_ < min_z) {
+                current_z_level_ = min_z;
+            }
+            if (current_z_level_ > max_z) {
+                current_z_level_ = max_z;
+            }
+        }
         
         ImGui::End();
     }
@@ -878,6 +924,317 @@ bool GUIManager::RenderVariableEditorDialog() {
     }
 
     return confirmed;
+}
+
+int GUIManager::ShowUnsavedChangesDialog(const std::string& filename) {
+    unsaved_changes_filename_ = filename;
+    unsaved_changes_result_ = 0;
+    
+    // Open the popup if not already open
+    if (!show_unsaved_changes_dialog_) {
+        show_unsaved_changes_dialog_ = true;
+        ImGui::OpenPopup("Unsaved Changes");
+    }
+    
+    return unsaved_changes_result_;
+}
+
+int GUIManager::RenderUnsavedChangesDialog() {
+    if (!show_unsaved_changes_dialog_) {
+        return 0;
+    }
+    
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    
+    bool is_open = show_unsaved_changes_dialog_;
+    if (ImGui::BeginPopupModal("Unsaved Changes", &is_open, 
+                               ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
+        // Display message
+        ImGui::Text("The file '%s' has unsaved changes.", unsaved_changes_filename_.c_str());
+        ImGui::Text("Do you want to save your changes?");
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        
+        // Buttons
+        float button_width = 100.0f;
+        float spacing = 10.0f;
+        float total_width = button_width * 3 + spacing * 2;
+        ImGui::SetCursorPosX((ImGui::GetWindowWidth() - total_width) * 0.5f);
+        
+        if (ImGui::Button("Save", ImVec2(button_width, 0))) {
+            unsaved_changes_result_ = 1;
+            show_unsaved_changes_dialog_ = false;
+            ImGui::CloseCurrentPopup();
+        }
+        
+        ImGui::SameLine(0, spacing);
+        
+        if (ImGui::Button("Discard", ImVec2(button_width, 0))) {
+            unsaved_changes_result_ = 2;
+            show_unsaved_changes_dialog_ = false;
+            ImGui::CloseCurrentPopup();
+        }
+        
+        ImGui::SameLine(0, spacing);
+        
+        if (ImGui::Button("Cancel", ImVec2(button_width, 0))) {
+            unsaved_changes_result_ = 3;
+            show_unsaved_changes_dialog_ = false;
+            ImGui::CloseCurrentPopup();
+        }
+        
+        ImGui::EndPopup();
+    }
+    
+    // Update state if dialog was closed
+    if (!is_open) {
+        show_unsaved_changes_dialog_ = false;
+        unsaved_changes_result_ = 3; // Treat close as cancel
+    }
+    
+    return unsaved_changes_result_;
+}
+
+void GUIManager::CloseUnsavedChangesDialog() {
+    show_unsaved_changes_dialog_ = false;
+    unsaved_changes_result_ = 0;
+}
+
+bool GUIManager::ShowLoadingDialog(const std::string& message, float progress) {
+    loading_message_ = message;
+    loading_progress_ = progress;
+    
+    // Open the popup if not already open
+    if (!show_loading_dialog_) {
+        show_loading_dialog_ = true;
+        ImGui::OpenPopup("Loading");
+    }
+    
+    return show_loading_dialog_;
+}
+
+void GUIManager::CloseLoadingDialog() {
+    show_loading_dialog_ = false;
+}
+
+void GUIManager::RenderLoadingDialog() {
+    if (!show_loading_dialog_) {
+        return;
+    }
+    
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    
+    bool is_open = show_loading_dialog_;
+    if (ImGui::BeginPopupModal("Loading", &is_open, 
+                               ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
+        // Display loading message
+        ImGui::Text("%s", loading_message_.c_str());
+        ImGui::Spacing();
+        
+        // Display progress bar
+        char progress_text[32];
+        snprintf(progress_text, sizeof(progress_text), "%.0f%%", loading_progress_ * 100.0f);
+        ImGui::ProgressBar(loading_progress_, ImVec2(400, 0), progress_text);
+        
+        ImGui::Spacing();
+        
+        // Show close button when loading is complete
+        if (loading_progress_ >= 1.0f) {
+            ImGui::Separator();
+            
+            // Center the button
+            float button_width = 120.0f;
+            float window_width = ImGui::GetWindowWidth();
+            ImGui::SetCursorPosX((window_width - button_width) * 0.5f);
+            
+            if (ImGui::Button("Close", ImVec2(button_width, 0))) {
+                show_loading_dialog_ = false;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        
+        ImGui::EndPopup();
+    }
+    
+    // Update state if dialog was closed
+    if (!is_open) {
+        show_loading_dialog_ = false;
+    }
+}
+
+void GUIManager::RenderViewportOverlay(const std::string& message) {
+    if (message.empty()) {
+        return;
+    }
+
+    // Get main viewport
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    
+    // Calculate center position
+    ImVec2 center = viewport->GetCenter();
+    
+    // Create an overlay window
+    ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowBgAlpha(0.7f); // Semi-transparent background
+    
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | 
+                             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | 
+                             ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize |
+                             ImGuiWindowFlags_NoInputs;
+    
+    if (ImGui::Begin("ViewportOverlay", nullptr, flags)) {
+        // Display message with larger font
+        ImGui::SetWindowFontScale(2.0f);
+        ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "%s", message.c_str());
+        ImGui::SetWindowFontScale(1.0f);
+        
+        ImGui::End();
+    }
+}
+
+void GUIManager::ShowKeyboardShortcutsDialog() {
+    show_keyboard_shortcuts_dialog_ = true;
+    ImGui::OpenPopup("Keyboard Shortcuts");
+}
+
+void GUIManager::RenderKeyboardShortcutsDialog() {
+    if (!show_keyboard_shortcuts_dialog_) {
+        return;
+    }
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(600, 500), ImGuiCond_Appearing);
+
+    bool is_open = show_keyboard_shortcuts_dialog_;
+    if (ImGui::BeginPopupModal("Keyboard Shortcuts", &is_open, ImGuiWindowFlags_NoResize)) {
+        ImGui::Text("MYG Editor Keyboard Shortcuts");
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // Create a table for shortcuts
+        if (ImGui::BeginTable("ShortcutsTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+            // Set column widths
+            ImGui::TableSetupColumn("Shortcut", ImGuiTableColumnFlags_WidthFixed, 150.0f);
+            ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableHeadersRow();
+
+            // File operations
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("Ctrl+Shift+O");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("Open Project");
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("Ctrl+O");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("Open Map");
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("Ctrl+S");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("Save Map");
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("Alt+F4");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("Exit Application");
+
+            // Edit operations
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("Ctrl+Z");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("Undo");
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("Ctrl+Y");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("Redo");
+
+            // Project operations
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("F5");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("Compile Project");
+
+            // Viewport operations
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("Left Click");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("Place Selected Object");
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("Right Click");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("Open Tile Context Menu");
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("Middle Mouse Drag");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("Pan Camera");
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("Mouse Wheel");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("Zoom Camera");
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("Delete");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("Delete Selected Object");
+
+            // Help
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("F1");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("Show Keyboard Shortcuts");
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("Esc");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("Close Application");
+
+            ImGui::EndTable();
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // Center the close button
+        float button_width = 120.0f;
+        float window_width = ImGui::GetWindowWidth();
+        ImGui::SetCursorPosX((window_width - button_width) * 0.5f);
+
+        if (ImGui::Button("Close", ImVec2(button_width, 0))) {
+            show_keyboard_shortcuts_dialog_ = false;
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
+    // Update state if dialog was closed
+    if (!is_open) {
+        show_keyboard_shortcuts_dialog_ = false;
+    }
 }
 
 } // namespace myg

@@ -2,6 +2,7 @@
 #include <sstream>
 #include <algorithm>
 #include <cctype>
+#include <iostream>
 
 namespace myg {
 
@@ -86,37 +87,44 @@ std::unique_ptr<TileInstance> TileInstance::FromString(
     const std::string& str,
     ::DMCompiler::DMObjectTree* tree
 ) {
-    auto tile = std::make_unique<TileInstance>();
-    tile->cache_valid_ = false;
-    tile->cached_area_ = nullptr;
+    try {
+        auto tile = std::make_unique<TileInstance>();
+        tile->cache_valid_ = false;
+        tile->cached_area_ = nullptr;
 
-    size_t pos = 0;
+        size_t pos = 0;
 
-    while (pos < str.size()) {
-        // Skip whitespace and commas
-        while (pos < str.size() && (std::isspace(str[pos]) || str[pos] == ',')) {
-            pos++;
-        }
+        while (pos < str.size()) {
+            // Skip whitespace and commas
+            while (pos < str.size() && (std::isspace(str[pos]) || str[pos] == ',')) {
+                pos++;
+            }
 
-        if (pos >= str.size()) break;
+            if (pos >= str.size()) break;
 
-        // Parse object path
-        ObjectInstance obj;
-        size_t path_start = pos;
+            // Parse object path
+            ObjectInstance obj;
+            size_t path_start = pos;
 
-        // Find end of path (either '{' for vars, ',' for next object, or end of string)
-        while (pos < str.size() && str[pos] != '{' && str[pos] != ',' && 
-               str[pos] != ')' && str[pos] != '\n') {
-            pos++;
-        }
+            // Find end of path (either '{' for vars, ',' for next object, or end of string)
+            while (pos < str.size() && str[pos] != '{' && str[pos] != ',' && 
+                   str[pos] != ')' && str[pos] != '\n') {
+                pos++;
+            }
 
-        obj.type_path = str.substr(path_start, pos - path_start);
+            obj.type_path = str.substr(path_start, pos - path_start);
 
-        // Trim whitespace from path
-        size_t path_end = obj.type_path.find_last_not_of(" \t\r\n");
-        if (path_end != std::string::npos) {
-            obj.type_path = obj.type_path.substr(0, path_end + 1);
-        }
+            // Trim whitespace from path
+            size_t path_end = obj.type_path.find_last_not_of(" \t\r\n");
+            if (path_end != std::string::npos) {
+                obj.type_path = obj.type_path.substr(0, path_end + 1);
+            }
+
+            // Validate object path
+            if (!obj.type_path.empty() && obj.type_path[0] != '/') {
+                std::cerr << "Warning: Invalid object path (missing leading slash): " << obj.type_path << std::endl;
+                // Continue parsing but log the warning
+            }
 
         // Parse variables if present
         if (pos < str.size() && str[pos] == '{') {
@@ -202,12 +210,20 @@ std::unique_ptr<TileInstance> TileInstance::FromString(
             }
         }
 
-        if (!obj.type_path.empty()) {
-            tile->objects.push_back(obj);
+            if (!obj.type_path.empty()) {
+                tile->objects.push_back(obj);
+            }
         }
-    }
 
-    return tile;
+        return tile;
+    } catch (const std::exception& e) {
+        std::cerr << "Error parsing tile instance: " << e.what() << std::endl;
+        // Return an empty tile instance rather than nullptr
+        auto tile = std::make_unique<TileInstance>();
+        tile->cache_valid_ = false;
+        tile->cached_area_ = nullptr;
+        return tile;
+    }
 }
 
 std::vector<ObjectInstance*> TileInstance::GetLayerSorted() {

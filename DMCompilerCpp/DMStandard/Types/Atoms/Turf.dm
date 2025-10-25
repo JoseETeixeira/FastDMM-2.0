@@ -1,4 +1,5 @@
-﻿/turf
+// turf type definition
+/turf
 	parent_type = /atom
 
 	layer = TURF_LAYER
@@ -29,3 +30,4 @@
 	Exited(atom/movable/Obj, atom/newloc)
 		Uncrossed(Obj)
 		// /atom/movable/Move() is responsible for calling Uncrossed() on contents
+

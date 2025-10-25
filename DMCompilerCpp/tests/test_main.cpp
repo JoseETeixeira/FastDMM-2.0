@@ -8,6 +8,8 @@ int RunCompilerTests();
 int RunPreprocessorTests();
 void RunObjectTreeTests();
 void RunProcTests();
+void RunProcParameterRegistrationTests();
+void RunVarBlockParsingTests();
 int RunBytecodeTests();
 int RunExpressionCompilerTests();
 int RunStatementCompilerTests();
@@ -24,6 +26,8 @@ void PrintUsage() {
     std::cout << "  [preprocessor] - Run preprocessor tests only" << std::endl;
     std::cout << "  [objecttree]   - Run object tree tests only" << std::endl;
     std::cout << "  [proc]         - Run proc tests only" << std::endl;
+    std::cout << "  [paramreg]     - Run proc parameter registration tests only" << std::endl;
+    std::cout << "  [varblock]     - Run var block parsing tests only" << std::endl;
     std::cout << "  [bytecode]     - Run bytecode tests only" << std::endl;
     std::cout << "  [exprcompiler] - Run expression compiler tests only" << std::endl;
     std::cout << "  [dmmparser]    - Run DMM parser tests only" << std::endl;
@@ -61,6 +65,14 @@ int main(int argc, char** argv) {
     
     if (filter.empty() || filter == "[proc]") {
         RunProcTests();
+    }
+    
+    if (filter.empty() || filter == "[paramreg]") {
+        RunProcParameterRegistrationTests();
+    }
+    
+    if (filter.empty() || filter == "[varblock]") {
+        RunVarBlockParsingTests();
     }
     
     if (filter.empty() || filter == "[bytecode]") {

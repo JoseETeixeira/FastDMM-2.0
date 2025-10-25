@@ -1,3 +1,4 @@
+// vector type definition
 /vector
 	var/len = null as num|null
 	var/size = null as num|null
@@ -25,3 +26,4 @@
 
 /proc/vector(x, y, z)
 	return new /vector(x, y, z)
+

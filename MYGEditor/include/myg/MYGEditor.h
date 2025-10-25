@@ -143,6 +143,12 @@ private:
      * @param action Action code (1=edit_vars, 2=delete, 3=move_top, 4=move_bottom)
      */
     void HandleContextMenuAction(int action);
+
+    /**
+     * Handle unsaved changes dialog result
+     * @param result Dialog result (1=save, 2=discard, 3=cancel)
+     */
+    void HandleUnsavedChangesDialogResult(int result);
 };
 
 } // namespace myg

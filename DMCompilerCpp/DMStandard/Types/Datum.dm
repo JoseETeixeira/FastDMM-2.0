@@ -1,4 +1,5 @@
-﻿/datum
+// datum type definition
+/datum
 	var/tmp/type as opendream_compiletimereadonly
 	var/tmp/parent_type
 
@@ -16,3 +17,4 @@
 	proc/Read(savefile/F)
 
 	proc/Write(savefile/F)
+

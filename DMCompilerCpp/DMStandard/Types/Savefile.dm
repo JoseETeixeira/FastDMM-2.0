@@ -1,4 +1,5 @@
-﻿/savefile
+// savefile type definition
+/savefile
 	var/byond_build
 	var/byond_version
 	var/cd
@@ -18,3 +19,4 @@
 
 	proc/Unlock()
 		set opendream_unimplemented = TRUE
+

@@ -536,17 +536,49 @@ bool DMStatementCompiler::CompileForIn(DMASTProcStatementForIn* stmt) {
     // Push loop context for break/continue
     PushLoopContext(loopLabel, endLabel, continueLabel);
     
-    // Step 4: Handle the loop variable - could be:
-    // - Simple identifier (x) - existing variable or implicit declaration
-    // - Path expression (var/x) - implicit var declaration (parsed as path by parser)
-    // - Dereference (obj.field) - field access
+    // Step 4: Handle the loop variable using enhanced VarDecl information
+    // The parser has already extracted variable name, type path, and type filter
+    // into the VarDecl field during tasks 1 and 2
     
     DMReference outputRef;
     bool refCreated = false;
     
-    // Check if this is a path expression that represents a var declaration
-    // In DM, "for(var/x in list)" is parsed as a path "/x" with implicit var declaration
-    if (auto* pathExpr = dynamic_cast<DMASTConstantPath*>(stmt->Variable.get())) {
+    // First, check if we have enhanced variable declaration information
+    if (!stmt->VarDecl.Name.empty()) {
+        // Enhanced variable declaration from parser (tasks 1 & 2)
+        // This handles: for(var/mob/M in world), for(var/mob/M as /mob|mob in world), etc.
+        std::string varName = stmt->VarDecl.Name;
+        
+        // Validate variable name is not empty (requirement 1.1, 1.2)
+        if (varName.empty()) {
+            Compiler_->ForcedError(stmt->Location_, "Invalid variable name in for-in loop");
+            PopLoopContext();
+            int destroyId = Proc_->DecrementEnumeratorId();
+            Writer_->DestroyEnumerator(destroyId);
+            return false;
+        }
+        
+        // Check if the variable already exists in local scope
+        LocalVariable* localVar = Proc_->GetLocalVariable(varName);
+        if (!localVar) {
+            // Variable doesn't exist - create it with type information if available
+            std::optional<DreamPath> typePath = stmt->VarDecl.TypePath;
+            localVar = Proc_->AddLocalVariable(varName, typePath);
+            if (!localVar) {
+                Compiler_->ForcedError(stmt->Location_, "Failed to create loop variable '" + varName + "'");
+                PopLoopContext();
+                int destroyId = Proc_->DecrementEnumeratorId();
+                Writer_->DestroyEnumerator(destroyId);
+                return false;
+            }
+        }
+        
+        // Create reference to the local variable
+        outputRef = DMReference::CreateLocal(localVar->Id);
+        refCreated = true;
+    }
+    // Fallback: Handle legacy cases where VarDecl is not populated
+    else if (auto* pathExpr = dynamic_cast<DMASTConstantPath*>(stmt->Variable.get())) {
         // Extract the variable name from the path (last element)
         std::string varName = pathExpr->Path.Path.GetLastElement();
         if (varName.empty()) {

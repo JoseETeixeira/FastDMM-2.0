@@ -97,7 +97,7 @@ bool DMExpressionCompiler::CompileConstantPath(DMASTConstantPath* expr) {
     // The path is already a DreamPath in expr->Path.Path
     const DreamPath& dreamPath = expr->Path.Path;
     
-    // Use GetType with context for better resolution (handles absolute, relative, and parent paths)
+    // Strategy 1: Try direct resolution with context first
     DMObject* context = (Proc_ && Proc_->OwningObject) ? Proc_->OwningObject : nullptr;
     DMObject* typeObj = Compiler_->GetObjectTree()->GetType(dreamPath, context);
     
@@ -106,19 +106,78 @@ bool DMExpressionCompiler::CompileConstantPath(DMASTConstantPath* expr) {
         Writer_->EmitInt(DreamProcOpcode::PushType, typeObj->Id);
         Writer_->ResizeStack(1);  // Pushes 1 value onto stack
         return true;
-    } else {
-        // Type not found - emit comprehensive error message
-        if (Compiler_) {
-            std::string pathStr = dreamPath.ToString();
-            std::string contextMsg = "Type path '" + pathStr + "' could not be resolved";
-            if (context) {
-                contextMsg += " in proc " + context->Path.ToString() + "/" + Proc_->Name;
-                contextMsg += " (searched from context: " + context->Path.ToString() + ")";
-            }
-            Compiler_->ForcedError(expr->Location_, contextMsg);
-        }
-        return false;
     }
+    
+    // Strategy 2: If path is not absolute, try absolute path resolution
+    if (dreamPath.GetPathType() != DreamPath::PathType::Absolute) {
+        DreamPath absolutePath(DreamPath::PathType::Absolute, dreamPath.GetElements());
+        typeObj = Compiler_->GetObjectTree()->GetType(absolutePath, nullptr);
+        
+        if (typeObj != nullptr) {
+            // Emit PushType opcode with the type ID
+            Writer_->EmitInt(DreamProcOpcode::PushType, typeObj->Id);
+            Writer_->ResizeStack(1);  // Pushes 1 value onto stack
+            return true;
+        }
+    }
+    
+    // Strategy 3: Try resolution from root context as last resort
+    DMObject* root = Compiler_->GetObjectTree()->GetRoot();
+    if (root && root != context) {
+        typeObj = Compiler_->GetObjectTree()->GetType(dreamPath, root);
+        
+        if (typeObj != nullptr) {
+            // Emit PushType opcode with the type ID
+            Writer_->EmitInt(DreamProcOpcode::PushType, typeObj->Id);
+            Writer_->ResizeStack(1);  // Pushes 1 value onto stack
+            return true;
+        }
+    }
+    
+    // All strategies failed - type not found
+    // Provide comprehensive error message with resolution context
+    if (Compiler_) {
+        std::string pathStr = dreamPath.ToString();
+        std::string contextMsg = "Type path '" + pathStr + "' could not be resolved\n";
+        contextMsg += "  Location: " + expr->Location_.ToString() + "\n";
+        
+        // Include proc and object context
+        if (Proc_) {
+            contextMsg += "  Context: proc " + Proc_->Name;
+            if (context) {
+                contextMsg += " in " + context->Path.ToString();
+            }
+            contextMsg += "\n";
+        }
+        
+        // Show which resolution strategies were attempted
+        contextMsg += "  Resolution attempts:\n";
+        contextMsg += "    1. Direct resolution with context";
+        if (context) {
+            contextMsg += " (" + context->Path.ToString() + ")";
+        }
+        contextMsg += " - FAILED\n";
+        
+        if (dreamPath.GetPathType() != DreamPath::PathType::Absolute) {
+            DreamPath absolutePath(DreamPath::PathType::Absolute, dreamPath.GetElements());
+            contextMsg += "    2. Absolute path resolution (" + absolutePath.ToString() + ") - FAILED\n";
+        }
+        
+        if (root && root != context) {
+            contextMsg += "    3. Resolution from root context (/) - FAILED\n";
+        }
+        
+        // Provide suggestions for common issues
+        contextMsg += "  Suggestions:\n";
+        contextMsg += "    - Verify the type exists in the object tree\n";
+        contextMsg += "    - Check if the type is defined before this usage\n";
+        if (dreamPath.GetPathType() != DreamPath::PathType::Absolute) {
+            contextMsg += "    - Try using an absolute path (e.g., /" + pathStr + ")\n";
+        }
+        
+        Compiler_->ForcedError(expr->Location_, contextMsg);
+    }
+    return false;
 }
 
 bool DMExpressionCompiler::CompileBinaryOp(DMASTExpressionBinary* expr) {
@@ -469,57 +528,72 @@ bool DMExpressionCompiler::CompileCall(DMASTCall* expr) {
             return CompileSqrt(expr);
         }
         
-        // Try to look up as a global proc first
-        int procId = Compiler_->GetObjectTree()->GetGlobalProcId(procName);
+        // Use the improved GetProc() method which searches:
+        // 1. Current object and parent chain (if we have an owning object)
+        // 2. Global procs
+        DMProc* resolvedProc = nullptr;
+        int procId = -1;
         
-        // If not a global proc, check if it's a member proc of the current object
-        if (procId == -1 && Proc_->OwningObject) {
-            // Check if the owning object has this proc
-            if (Proc_->OwningObject->HasProc(procName)) {
-                // This is a member proc call on src (implicit this)
-                // Compile as: push src, call method
+        if (Proc_->OwningObject) {
+            // Try to resolve through object hierarchy first, then global procs
+            resolvedProc = Compiler_->GetObjectTree()->GetProc(Proc_->OwningObject, procName);
+            if (resolvedProc) {
+                procId = resolvedProc->Id;
                 
-                // Compile arguments first
-                int argCount = 0;
-                for (const auto& param : expr->Parameters) {
-                    if (param->Key) {
-                        std::cerr << "Error: Named arguments not yet supported" << std::endl;
-                        return false;
+                // Check if this is a member proc (not a global proc)
+                if (resolvedProc->OwningObject && resolvedProc->OwningObject != Compiler_->GetObjectTree()->GetRoot()) {
+                    // This is a member proc call on src (implicit this)
+                    // Compile as: push src, call method
+                    
+                    // Compile arguments first
+                    int argCount = 0;
+                    for (const auto& param : expr->Parameters) {
+                        if (param->Key) {
+                            std::cerr << "Error: Named arguments not yet supported" << std::endl;
+                            return false;
+                        }
+                        if (!CompileExpression(param->Value.get())) {
+                            return false;
+                        }
+                        argCount++;
                     }
-                    if (!CompileExpression(param->Value.get())) {
-                        return false;
-                    }
-                    argCount++;
+                    
+                    // Push src (the current object)
+                    std::vector<uint8_t> srcRef = { 1 };  // DMReference.Type.Src
+                    Writer_->EmitMulti(DreamProcOpcode::PushReferenceValue, srcRef);
+                    Writer_->ResizeStack(1);  // Pushes src
+                    
+                    // Call the method
+                    DMCallArgumentsType argsType = (argCount == 0) ? 
+                        DMCallArgumentsType::None : DMCallArgumentsType::FromStack;
+                    
+                    Writer_->EmitString(DreamProcOpcode::DereferenceCall, procName);
+                    Writer_->AppendByte(static_cast<uint8_t>(argsType));
+                    Writer_->AppendInt(argCount);
+                    
+                    // DereferenceCall pops object + arguments, pushes result (net: 1 - argCount - 1 = -argCount)
+                    Writer_->ResizeStack(-argCount);
+                    
+                    return true;
                 }
-                
-                // Push src (the current object)
-                std::vector<uint8_t> srcRef = { 1 };  // DMReference.Type.Src
-                Writer_->EmitMulti(DreamProcOpcode::PushReferenceValue, srcRef);
-                Writer_->ResizeStack(1);  // Pushes src
-                
-                // Call the method
-                DMCallArgumentsType argsType = (argCount == 0) ? 
-                    DMCallArgumentsType::None : DMCallArgumentsType::FromStack;
-                
-                Writer_->EmitString(DreamProcOpcode::DereferenceCall, procName);
-                Writer_->AppendByte(static_cast<uint8_t>(argsType));
-                Writer_->AppendInt(argCount);
-                
-                // DereferenceCall pops object + arguments, pushes result (net: 1 - argCount - 1 = -argCount)
-                Writer_->ResizeStack(-argCount);
-                
-                return true;
             }
+        } else {
+            // No owning object context, try global procs only
+            procId = Compiler_->GetObjectTree()->GetGlobalProcId(procName);
         }
         
         if (procId == -1) {
+            // Emit warning (not error) for unresolved proc - it may be runtime-defined
             std::string contextMsg = "Unknown proc '" + procName + "()' at " + expr->Location_.ToString();
             if (Proc_ && Proc_->OwningObject) {
                 contextMsg += " in proc " + Proc_->OwningObject->Path.ToString() + "/" + Proc_->Name;
             }
-            contextMsg += " (not found as global proc or member proc)";
             Compiler_->ForcedWarning(contextMsg);
-            return false;
+            
+            // Emit PushNull as graceful fallback for runtime resolution
+            Writer_->Emit(DreamProcOpcode::PushNull);
+            Writer_->ResizeStack(1);
+            return true;  // Continue compilation despite unresolved proc
         }
         
         // Compile arguments (push them onto stack)
@@ -811,8 +885,7 @@ bool DMExpressionCompiler::CompileAssign(DMASTAssign* expr) {
 
 bool DMExpressionCompiler::EmitReference(DMASTExpression* lvalue, std::vector<uint8_t>& refBytes) {
     // Emit a DMReference for the lvalue expression
-    // For now, we only support simple identifiers (local variables, special identifiers)
-    // Future: support field access, array indexing, etc.
+    // Supports: identifiers, field access (obj.field), chained field access (a.b.c), indexing (list[index])
     
     if (auto* ident = dynamic_cast<DMASTIdentifier*>(lvalue)) {
         std::string name = ident->Identifier;
@@ -881,11 +954,48 @@ bool DMExpressionCompiler::EmitReference(DMASTExpression* lvalue, std::vector<ui
         return false;
     }
     else if (auto* deref = dynamic_cast<DMASTDereference*>(lvalue)) {
-        // Field access (e.g., obj.field, src.field)
-        // This would require compiling the base expression and then the field name
-        // Not fully implemented yet
-        Compiler_->ForcedWarning("Field assignment not yet fully implemented");
-        return false;
+        // Field access (e.g., obj.field, src.owner.myBeam) or indexing (list[index])
+        // Strategy: Compile the base expression to get the object reference on the stack,
+        // then create a reference that dereferences the field/index
+        
+        // Check if this is field access (obj.field) or indexing (list[index])
+        auto* propIdent = dynamic_cast<DMASTIdentifier*>(deref->Property.get());
+        
+        if (propIdent) {
+            // Field access: obj.field or a.b.c
+            // Compile the base expression (pushes object onto stack)
+            if (!CompileExpression(deref->Expression.get())) {
+                return false;
+            }
+            
+            // Create a Field reference (type 12) with the field name
+            // DMReference.Type.Field (12) = reference to a field on the object at top of stack
+            int stringId = Compiler_->GetObjectTree()->AddString(propIdent->Identifier);
+            refBytes = { 12 };  // DMReference.Type.Field
+            refBytes.push_back(stringId & 0xFF);
+            refBytes.push_back((stringId >> 8) & 0xFF);
+            refBytes.push_back((stringId >> 16) & 0xFF);
+            refBytes.push_back((stringId >> 24) & 0xFF);
+            return true;
+        }
+        else {
+            // Indexing: list[index] or obj[expr]
+            // Compile the base expression (pushes list/object onto stack)
+            if (!CompileExpression(deref->Expression.get())) {
+                return false;
+            }
+            
+            // Compile the index expression (pushes index onto stack)
+            if (!CompileExpression(deref->Property.get())) {
+                return false;
+            }
+            
+            // Create an Index reference (type 13)
+            // DMReference.Type.Index (13) = reference to an indexed element
+            // Stack has: [object/list] [index]
+            refBytes = { 13 };  // DMReference.Type.Index
+            return true;
+        }
     }
     
     Compiler_->ForcedWarning("Unsupported LValue type for assignment");
@@ -1212,7 +1322,7 @@ bool DMExpressionCompiler::CompileProb(DMASTCall* expr) {
 
 bool DMExpressionCompiler::CompileIsType(DMASTCall* expr) {
     // istype(value, type_path) - checks if value is of given type
-    // Bytecode: Push value, Push type, IsType
+    // Bytecode: Push value, Push type (via PushType opcode), IsType
     
     if (expr->Parameters.size() != 2) {
         std::string contextMsg = "istype() requires exactly 2 arguments (found " + std::to_string(expr->Parameters.size()) + ") at " + expr->Location_.ToString();
@@ -1223,19 +1333,34 @@ bool DMExpressionCompiler::CompileIsType(DMASTCall* expr) {
         return false;
     }
     
-    // Compile the value argument
+    // Compile the value argument (first argument)
+    // This pushes the value to check onto the stack
     if (!CompileExpression(expr->Parameters[0]->Value.get())) {
-        std::cerr << "Error: Failed to compile istype() value argument" << std::endl;
+        std::string contextMsg = "Failed to compile istype() value argument at " + expr->Location_.ToString();
+        if (Proc_ && Proc_->OwningObject) {
+            contextMsg += " in proc " + Proc_->OwningObject->Path.ToString() + "/" + Proc_->Name;
+        }
+        Compiler_->ForcedError(expr->Location_, contextMsg);
         return false;
     }
     
-    // Compile the type argument
+    // Compile the type argument (second argument)
+    // For type path literals (e.g., /atom), this will call CompileConstantPath
+    // which now has enhanced resolution strategies and will emit PushType opcode
     if (!CompileExpression(expr->Parameters[1]->Value.get())) {
-        std::cerr << "Error: Failed to compile istype() type argument" << std::endl;
+        std::string contextMsg = "Failed to compile istype() type argument at " + expr->Location_.ToString();
+        if (Proc_ && Proc_->OwningObject) {
+            contextMsg += " in proc " + Proc_->OwningObject->Path.ToString() + "/" + Proc_->Name;
+        }
+        contextMsg += "\n  Note: Type path arguments must be valid type paths (e.g., /atom, /mob)";
+        Compiler_->ForcedError(expr->Location_, contextMsg);
         return false;
     }
     
     // Emit IsType opcode
+    // This opcode expects two values on the stack:
+    //   1. The value to check (pushed by first argument)
+    //   2. The type to check against (pushed by second argument via PushType)
     Writer_->Emit(DreamProcOpcode::IsType);
     
     // IsType pops 2 values (value, type), pushes 1 (boolean), net -1

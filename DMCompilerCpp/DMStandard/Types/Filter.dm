@@ -1,3 +1,4 @@
+// dm_filter type definition
 /dm_filter
 	var/x
 	var/y
@@ -17,3 +18,4 @@
 	var/repeat
 	var/radius
 	var/falloff
+

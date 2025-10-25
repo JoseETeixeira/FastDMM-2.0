@@ -1,4 +1,5 @@
-﻿/icon
+// Icon type definition
+/icon
 	parent_type = /datum
 	var/icon
 

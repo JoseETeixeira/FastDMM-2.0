@@ -96,6 +96,10 @@ private:
     bool ParseDMM(const std::string& content);
     bool ParseTileDefinition(const std::string& line, std::string& key, std::string& definition);
     bool ParseMapGrid(const std::string& section);
+
+    // Serialization helpers
+    bool WriteTileDefinitions(std::ofstream& file);
+    bool WriteMapGrid(std::ofstream& file);
 };
 
 } // namespace myg
