@@ -50,7 +50,7 @@ tasks.run.dependsOn(unpackNatives)
 
 configurations { fatCapsule }
 
-dependencies { fatCapsule 'co.paralleluniverse:capsule:0.10.1-SNAPSHOT' }
+dependencies { fatCapsule 'co.paralleluniverse:capsule:1.0.3' }
 
 task fatCapsule(type: FatCapsule, dependsOn: [jar, unpackNatives]) {
     capsuleConfiguration = configurations.fatCapsule

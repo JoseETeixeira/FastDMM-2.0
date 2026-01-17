@@ -1,6 +1,0 @@
-// Main DME file for preprocessor testing
-#define DEBUG 1
-#define MAX_HEALTH 100
-
-#include "code/objects.dm"
-#include "code/procs.dm"
