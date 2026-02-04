@@ -36,6 +36,7 @@ import com.github.monster860.fastdmm.editing.placement.PickerPlacementMode;
 import com.github.monster860.fastdmm.editing.placement.RandomPlacementMode;
 import com.github.monster860.fastdmm.editing.ui.EditorTabComponent;
 import com.github.monster860.fastdmm.editing.ui.EmptyTabPanel;
+import com.github.monster860.fastdmm.editing.ui.FindReplaceDialog;
 import com.github.monster860.fastdmm.editing.ui.NoDmeTreeModel;
 import com.github.monster860.fastdmm.editing.ui.ObjectTreeRenderer;
 import com.github.monster860.fastdmm.editing.ui.TileInspectorPanel;
@@ -468,6 +469,19 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 			randomChanceSpinner.setVisible(false);
 			toolBar.add(randomChanceLabel);
 			toolBar.add(randomChanceSpinner);
+			// Separator and Find/Replace button
+			toolBar.addSeparator();
+			JButton btnFindReplace = new JButton("Find/Replace");
+			btnFindReplace.setToolTipText("Find and Replace tiles (Ctrl+H)");
+			btnFindReplace.addActionListener(e -> {
+				if (objTree != null) {
+					FindReplaceDialog dialog = new FindReplaceDialog(FastDMM.this);
+					dialog.setVisible(true);
+				} else {
+					JOptionPane.showMessageDialog(FastDMM.this, "Please open a DME first.", "No Environment", JOptionPane.WARNING_MESSAGE);
+				}
+			});
+			toolBar.add(btnFindReplace);
 			topBar.add(toolBar, BorderLayout.EAST);
 			editorPanel.add(topBar, BorderLayout.NORTH);
 
@@ -549,6 +563,20 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 			// Ctrl+Y accelerator (works when Swing has focus)
 			menuItemRedo.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Y, InputEvent.CTRL_DOWN_MASK));
 			menu.add(menuItemRedo);
+
+			menu.addSeparator();
+
+			JMenuItem menuItemFindReplace = new JMenuItem("Find and Replace...", KeyEvent.VK_F);
+			menuItemFindReplace.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_H, InputEvent.CTRL_DOWN_MASK));
+			menuItemFindReplace.addActionListener(e -> {
+				if (objTree != null) {
+					FindReplaceDialog dialog = new FindReplaceDialog(FastDMM.this);
+					dialog.setVisible(true);
+				} else {
+					JOptionPane.showMessageDialog(FastDMM.this, "Please open a DME first.", "No Environment", JOptionPane.WARNING_MESSAGE);
+				}
+			});
+			menu.add(menuItemFindReplace);
 			
 			menu = new JMenu("Options");
 			menu.setMnemonic(KeyEvent.VK_O);
@@ -1757,6 +1785,29 @@ public class FastDMM extends JFrame implements ActionListener, TreeSelectionList
 		menuItemUndo.setEnabled(true);
 		menuItemRedo.setEnabled(!redostack.isEmpty());
 		return action.redo();
+	}
+
+	/**
+	 * Get the current Z-level being viewed/edited.
+	 */
+	public int getCurrentZ() {
+		return currentZ;
+	}
+
+	/**
+	 * Set the current Z-level and update UI accordingly.
+	 */
+	public void setCurrentZ(int z) {
+		if (dmm != null) {
+			z = Math.max(dmm.minZ, Math.min(dmm.maxZ, z));
+		}
+		currentZ = z;
+		if (dmm != null) {
+			dmm.storedZ = z;
+		}
+		if (zSpinner != null) {
+			SwingUtilities.invokeLater(() -> zSpinner.setValue(currentZ));
+		}
 	}
 	
 }
